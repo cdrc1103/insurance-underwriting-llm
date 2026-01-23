@@ -205,3 +205,24 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific
+# Data files (can be large, download from source)
+data/
+!data/.gitkeep
+
+# Model checkpoints and weights (large binary files)
+models/
+!models/.gitkeep
+
+# Results and outputs
+results/
+!results/.gitkeep
+
+# Experiment tracking
+wandb/
+mlruns/
+
+# IDE settings
+.vscode/
+.idea/
