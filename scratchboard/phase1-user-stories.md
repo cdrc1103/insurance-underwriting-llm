@@ -68,7 +68,7 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 ### Acceptance Criteria
 - [ ] Company profile extraction implemented (name, revenue, employees, industry, state)
 - [ ] Multi-turn conversation extraction with role labels (underwriter/assistant)
-- [ ] Tool calls and function calling segments excluded from conversations
+- [ ] Tool calls and function calling segments included for agent training
 - [ ] Text cleaning applied (normalize whitespace, handle special characters)
 - [ ] Industry classification extracted from business descriptions
 - [ ] Standardized input format implemented:
@@ -138,7 +138,7 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 **So that** preprocessed conversations can be efficiently fed into the training pipeline
 
 ### Acceptance Criteria
-- [ ] Tokenizer loaded for selected base model (GPT-2, Pythia, OPT, or TinyLlama)
+- [ ] Tokenizer loaded for selected base model (Qwen2.5-1.5B-Instruct)
 - [ ] Special tokens configured (BOS, EOS, padding, separation)
 - [ ] Conversation formatting implemented with proper role markers
 - [ ] Input-target pairs created for causal language modeling
@@ -151,7 +151,7 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 - [ ] Unit tests verify tokenization correctness
 
 ### Technical Considerations
-- Handle models with different tokenizer formats (GPT-2 vs Llama)
+- Handle Qwen2.5-1.5B-Instruct tokenizer format and chat template
 - Ensure assistant responses are properly masked during training
 - Consider left-padding vs right-padding for decoder-only models
 - Validate that loss is only computed on assistant tokens

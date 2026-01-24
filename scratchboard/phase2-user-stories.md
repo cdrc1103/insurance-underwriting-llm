@@ -12,7 +12,7 @@ Phase 2 establishes baseline performance metrics using the untrained base model 
 **So that** I can establish a baseline for finetuning comparison
 
 ### Acceptance Criteria
-- [ ] Base model selected from candidates (GPT-2, Pythia, OPT, TinyLlama)
+- [ ] Base model selected: Qwen2.5-1.5B-Instruct
 - [ ] Model selection rationale documented:
   - Parameter count (< 1B preferred)
   - Memory footprint on T4 16GB
@@ -25,7 +25,7 @@ Phase 2 establishes baseline performance metrics using the untrained base model 
 - [ ] Model architecture documented (layers, attention heads, hidden size)
 
 ### Technical Considerations
-- Evaluate tradeoffs: GPT-2 (proven) vs TinyLlama (modern architecture)
+- Qwen2.5-1.5B-Instruct selected for modern architecture with tool-use support
 - Test generation quality on sample conversations
 - Verify model fits in 16GB VRAM with headroom for inference
 - Check tokenizer vocabulary size and coverage of insurance terms

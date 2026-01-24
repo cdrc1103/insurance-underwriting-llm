@@ -67,8 +67,6 @@ uv pip install -e ".[dev]"
 pre-commit install
 ```
 
-For detailed setup instructions, see [docs/setup.md](docs/setup.md).
-
 ## Project Structure
 
 ```
