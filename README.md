@@ -4,7 +4,31 @@ Multi-turn conversation fine-tuning for insurance underwriting using parameter-e
 
 ## Overview
 
-This project implements a production-grade RAG system that processes Singapore financial documents with custom fine-tuned embeddings. The system demonstrates end-to-end AI engineering capabilities including data preprocessing, model fine-tuning, and comprehensive evaluation.
+This project demonstrates finetuning a small language model to perform multi-turn dialogue for insurance underwriting tasks. The goal is to take a base model with limited conversational abilities and adapt it to understand insurance domain knowledge and engage in coherent multi-turn conversations with underwriters.
+
+## Problem Statement
+
+Insurance underwriters need to assess company eligibility, recommend products, and make coverage decisions. This requires:
+- Understanding company profiles (revenue, employees, location, industry)
+- Knowledge of insurance products and underwriting guidelines
+- Ability to engage in multi-turn conversations to gather information and provide recommendations
+- Domain-specific reasoning about risk and appetite
+
+Small pretrained models typically lack:
+- Insurance domain knowledge
+- Multi-turn conversational coherence
+- Ability to reason about underwriting criteria
+
+## Objectives
+
+### Primary Goal
+Finetune a small language model (< 1B parameters) to handle multi-turn insurance underwriting conversations using the Snorkel AI Multi-Turn Insurance Underwriting dataset.
+
+### Success Criteria
+1. Model can maintain context across multiple conversation turns
+2. Model generates accurate underwriting recommendations based on company information
+3. Model demonstrates understanding of insurance terminology and concepts
+4. Measurable improvement over base model on evaluation metrics
 
 ### Key Features
 
@@ -107,17 +131,6 @@ This project is organized into 5 phases:
 
 See `scratchboard/` directory for detailed user stories for each phase.
 
-### Phase 1 Deliverables
-
-- ✅ Complete project structure with organized modules
-- ✅ Data loading from Hugging Face with caching
-- ✅ Preprocessing pipeline (company profiles + conversations)
-- ✅ Stratified dataset splitting with task type distribution
-- ✅ Tokenization module supporting multiple models
-- ✅ PyTorch DataLoader with memory estimation
-- ✅ Comprehensive test suite (>15 test files)
-- ✅ Executable scripts for preprocessing and splitting
-
 ## Dataset
 
 This project uses the [Multi-Turn Insurance Underwriting dataset](https://huggingface.co/datasets/snorkelai/Multi-Turn-Insurance-Underwriting) from Hugging Face, containing ~380 multi-turn conversations about insurance underwriting scenarios.
@@ -128,16 +141,3 @@ This project uses the [Multi-Turn Insurance Underwriting dataset](https://huggin
 - **Fine-tuning**: PEFT (LoRA/QLoRA), bitsandbytes
 - **Evaluation**: evaluate, rouge-score, sacrebleu
 - **Development**: ruff, pytest, pre-commit
-- **Notebooks**: Jupyter, matplotlib, seaborn
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-This is a personal portfolio project. For detailed development guidelines, see [CLAUDE.md](CLAUDE.md).
-
-## Contact
-
-For questions or feedback, please open an issue on GitHub.

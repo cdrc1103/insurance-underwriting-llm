@@ -1,12 +1,4 @@
-# Claude Code Instructions: Multi-Modal RAG for Financial Documents
-
-This document provides comprehensive guidance for working on the Multi-Modal RAG system for Singapore financial documents. Read this before making contributions or modifications.
-
----
-
-## Project Overview
-
-Build a production-grade RAG system that processes Singapore financial documents (PDFs, tables, charts) with custom fine-tuned embeddings to demonstrate end-to-end AI engineering capabilities.
+# Claude Code Instructions
 
 ## Development Environment
 
