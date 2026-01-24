@@ -2,7 +2,6 @@
 
 import pytest
 from datasets import Dataset
-from transformers import AutoTokenizer
 
 from src.data.tokenization import (
     compute_token_statistics,
@@ -17,7 +16,7 @@ from src.data.tokenization import (
 @pytest.fixture
 def sample_tokenizer():
     """Load a small tokenizer for testing."""
-    return load_tokenizer("gpt2")
+    return load_tokenizer("Qwen/Qwen2.5-1.5B-Instruct")
 
 
 @pytest.fixture
@@ -43,7 +42,7 @@ def sample_example():
 
 def test_load_tokenizer():
     """Test tokenizer loading."""
-    tokenizer = load_tokenizer("gpt2")
+    tokenizer = load_tokenizer("Qwen/Qwen2.5-1.5B-Instruct")
 
     assert tokenizer is not None
     assert tokenizer.pad_token is not None

@@ -1,12 +1,11 @@
 """Tests for data loading utilities."""
 
-from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from datasets import Dataset, DatasetDict
 
-from src.data.loader import (
+from src.data.dataset_io import (
     get_dataset_statistics,
     load_dataset_split,
     load_insurance_dataset,

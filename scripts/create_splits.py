@@ -13,7 +13,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.data.loader import load_dataset_split
+from src.data.dataset_io import load_dataset_split
 from src.data.splitting import create_stratified_split, print_split_summary, save_splits
 
 
@@ -90,9 +90,9 @@ def main():
 
     # Create splits
     print("\n2. Creating stratified splits...")
-    print(f"   Train: {args.train_size*100:.1f}%")
-    print(f"   Validation: {args.val_size*100:.1f}%")
-    print(f"   Test: {args.test_size*100:.1f}%")
+    print(f"   Train: {args.train_size * 100:.1f}%")
+    print(f"   Validation: {args.val_size * 100:.1f}%")
+    print(f"   Test: {args.test_size * 100:.1f}%")
     print(f"   Stratify by: {args.stratify_by}")
     print(f"   Random seed: {args.random_seed}")
 

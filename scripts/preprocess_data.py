@@ -14,8 +14,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.data.loader import load_insurance_dataset
-from src.data.preprocessing import preprocess_dataset, get_preprocessing_stats
+from src.data.dataset_io import load_insurance_dataset
+from src.data.preprocessing import get_preprocessing_stats, preprocess_dataset
 
 
 def main():
@@ -78,7 +78,7 @@ def main():
     # Compute statistics
     print("\n3. Computing statistics...")
     stats = get_preprocessing_stats(preprocessed)
-    print(f"   Preprocessed dataset statistics:")
+    print("   Preprocessed dataset statistics:")
     print(f"   - Examples: {stats['num_examples']}")
     print(f"   - Avg turns: {stats['turns']['mean']:.1f}")
     print(f"   - Turn range: {stats['turns']['min']}-{stats['turns']['max']}")

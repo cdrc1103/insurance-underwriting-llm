@@ -1,7 +1,7 @@
 """Data preprocessing utilities for insurance underwriting conversations."""
 
 import re
-from typing import Any, Optional
+from typing import Any
 
 from datasets import Dataset
 
@@ -61,18 +61,22 @@ def extract_conversation(example: dict[str, Any]) -> list[dict[str, str]]:
     if "messages" in example:
         for msg in example["messages"]:
             if isinstance(msg, dict) and "role" in msg and "content" in msg:
-                conversation.append({
-                    "role": msg["role"],
-                    "content": clean_text(msg["content"]),
-                })
+                conversation.append(
+                    {
+                        "role": msg["role"],
+                        "content": clean_text(msg["content"]),
+                    }
+                )
 
     elif "conversation" in example:
         for turn in example["conversation"]:
             if isinstance(turn, dict):
-                conversation.append({
-                    "role": turn.get("role", "unknown"),
-                    "content": clean_text(turn.get("content", "")),
-                })
+                conversation.append(
+                    {
+                        "role": turn.get("role", "unknown"),
+                        "content": clean_text(turn.get("content", "")),
+                    }
+                )
 
     if not conversation:
         raise ValueError("No valid conversation found in example")
@@ -122,13 +126,13 @@ def clean_text(text: str) -> str:
         raise TypeError(f"Expected string, got {type(text)}")
 
     # Normalize whitespace
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r"\s+", " ", text)
 
     # Remove leading/trailing whitespace
     text = text.strip()
 
     # Remove excessive punctuation
-    text = re.sub(r'([.!?]){2,}', r'\1', text)
+    text = re.sub(r"([.!?]){2,}", r"\1", text)
 
     return text
 
@@ -168,13 +172,17 @@ def format_conversation_prompt(
     return "\n".join(profile_lines)
 
 
-def preprocess_example(example: dict[str, Any], include_tool_calls: bool = False) -> Optional[dict[str, Any]]:
+def preprocess_example(
+    example: dict[str, Any], include_tool_calls: bool = True
+) -> dict[str, Any] | None:
     """
     Preprocess a single example.
 
     Args:
         example: Raw dataset example
-        include_tool_calls: If False, skip examples with tool calls
+        include_tool_calls: If True, include examples with tool calls.
+            Default is True since we're training Qwen2.5-1.5B-Instruct
+            for domain-specific tool use in insurance underwriting.
 
     Returns:
         Preprocessed example or None if example should be filtered
@@ -216,7 +224,7 @@ def preprocess_example(example: dict[str, Any], include_tool_calls: bool = False
 
 def preprocess_dataset(
     dataset: Dataset,
-    include_tool_calls: bool = False,
+    include_tool_calls: bool = True,
     verbose: bool = True,
 ) -> Dataset:
     """
@@ -224,7 +232,9 @@ def preprocess_dataset(
 
     Args:
         dataset: Raw dataset to preprocess
-        include_tool_calls: If False, filter examples with tool calls
+        include_tool_calls: If True, include examples with tool calls.
+            Default is True since we're training Qwen2.5-1.5B-Instruct
+            for domain-specific tool use in insurance underwriting.
         verbose: If True, print preprocessing statistics
 
     Returns:
@@ -256,10 +266,10 @@ def preprocess_dataset(
         raise ValueError("All examples were filtered during preprocessing")
 
     if verbose:
-        print(f"Preprocessing complete:")
+        print("Preprocessing complete:")
         print(f"  - Kept: {len(preprocessed)} examples")
         print(f"  - Filtered: {filtered_count} examples")
-        print(f"  - Retention rate: {len(preprocessed)/len(dataset)*100:.1f}%")
+        print(f"  - Retention rate: {len(preprocessed) / len(dataset) * 100:.1f}%")
 
     # Convert to Dataset
     return Dataset.from_list(preprocessed)

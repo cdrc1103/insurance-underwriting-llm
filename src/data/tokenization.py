@@ -1,13 +1,11 @@
 """Tokenization utilities for insurance underwriting conversations."""
 
-from typing import Optional
-
 from datasets import Dataset
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 
 def load_tokenizer(
-    model_name: str = "gpt2",
+    model_name: str = "Qwen/Qwen2.5-1.5B-Instruct",
     add_special_tokens: bool = True,
 ) -> PreTrainedTokenizer:
     """
@@ -26,16 +24,14 @@ def load_tokenizer(
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        # Set padding token if not set (common for GPT-2)
+        # Set padding token if not set (common for some models)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
         # Add special tokens if requested
         if add_special_tokens:
             # Add tokens for conversation roles if not present
-            special_tokens = {
-                "additional_special_tokens": ["[USER]", "[ASSISTANT]", "[COMPANY]"]
-            }
+            special_tokens = {"additional_special_tokens": ["[USER]", "[ASSISTANT]", "[COMPANY]"]}
             tokenizer.add_special_tokens(special_tokens)
 
         return tokenizer
@@ -133,7 +129,7 @@ def tokenize_dataset(
     max_length: int = 1024,
     truncation: bool = True,
     padding: str = "max_length",
-    remove_columns: Optional[list[str]] = None,
+    remove_columns: list[str] | None = None,
     verbose: bool = True,
 ) -> Dataset:
     """
@@ -171,8 +167,7 @@ def tokenize_dataset(
     if remove_columns is None:
         # Remove all columns except metadata
         remove_columns = [
-            col for col in dataset.column_names
-            if col not in ["original_index", "num_turns"]
+            col for col in dataset.column_names if col not in ["original_index", "num_turns"]
         ]
 
     tokenized_dataset = dataset.map(

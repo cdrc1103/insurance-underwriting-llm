@@ -1,14 +1,13 @@
 """Data loading utilities for insurance underwriting dataset."""
 
 from pathlib import Path
-from typing import Optional
 
 from datasets import Dataset, DatasetDict, load_dataset, load_from_disk
 
 
 def load_insurance_dataset(
     dataset_name: str = "snorkelai/Multi-Turn-Insurance-Underwriting",
-    cache_dir: Optional[Path] = None,
+    cache_dir: Path | None = None,
     force_download: bool = False,
 ) -> DatasetDict:
     """
@@ -94,7 +93,7 @@ def save_dataset_split(
         dataset.save_to_disk(str(save_path))
         print(f"Saved {split_name} split to: {save_path}")
     except Exception as e:
-        raise IOError(f"Failed to save dataset to {output_path}: {e}") from e
+        raise OSError(f"Failed to save dataset to {output_path}: {e}") from e
 
 
 def load_dataset_split(
@@ -125,4 +124,4 @@ def load_dataset_split(
         print(f"Loaded {split_name} split from: {load_path}")
         return dataset
     except Exception as e:
-        raise IOError(f"Failed to load dataset from {load_path}: {e}") from e
+        raise OSError(f"Failed to load dataset from {load_path}: {e}") from e

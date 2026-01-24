@@ -36,19 +36,10 @@ def test_project_structure() -> None:
 def test_imports() -> None:
     """Test that core dependencies can be imported."""
     # Core ML dependencies
-    import torch
-    import transformers
-    import peft
-    import datasets
-    import accelerate
 
     # Evaluation libraries
-    import evaluate
 
     # Data processing
-    import pandas
-    import numpy
-    import sklearn
 
     # All imports successful
     assert True

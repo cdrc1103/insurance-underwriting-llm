@@ -1,11 +1,9 @@
 """Tests for dataset splitting utilities."""
 
 import json
-from pathlib import Path
 
-import numpy as np
 import pytest
-from datasets import Dataset, DatasetDict
+from datasets import Dataset
 
 from src.data.splitting import (
     add_task_types,
@@ -28,7 +26,8 @@ def sample_dataset():
             [{"content": "Is this business eligible?"}],
             [{"content": "Tell me about auto insurance"}],
             [{"content": "General question here"}],
-        ] * 10,  # 50 examples total
+        ]
+        * 10,  # 50 examples total
         "num_turns": [2, 3, 2, 4, 1] * 10,
         "formatted_text": ["text" * 50] * 50,
     }

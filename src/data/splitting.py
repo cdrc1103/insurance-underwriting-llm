@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from datasets import Dataset, DatasetDict
@@ -52,6 +51,7 @@ def add_task_types(dataset: Dataset) -> Dataset:
     Returns:
         Dataset with task_type field added
     """
+
     def add_task_type(example):
         example["task_type"] = identify_task_type(example)
         return example
@@ -64,7 +64,7 @@ def create_stratified_split(
     train_size: float = 0.75,
     val_size: float = 0.125,
     test_size: float = 0.125,
-    stratify_by: Optional[str] = "task_type",
+    stratify_by: str | None = "task_type",
     random_seed: int = 42,
 ) -> DatasetDict:
     """
@@ -224,7 +224,7 @@ def save_splits(
             print(f"Saved statistics to: {stats_path}")
 
     except Exception as e:
-        raise IOError(f"Failed to save splits: {e}") from e
+        raise OSError(f"Failed to save splits: {e}") from e
 
 
 def load_splits(input_dir: Path) -> DatasetDict:
@@ -250,16 +250,17 @@ def load_splits(input_dir: Path) -> DatasetDict:
             split_path = input_dir / split_name
             if split_path.exists():
                 from datasets import load_from_disk
+
                 splits[split_name] = load_from_disk(str(split_path))
                 print(f"Loaded {split_name} split ({len(splits[split_name])} examples)")
 
         if not splits:
-            raise IOError("No splits found in directory")
+            raise OSError("No splits found in directory")
 
         return DatasetDict(splits)
 
     except Exception as e:
-        raise IOError(f"Failed to load splits: {e}") from e
+        raise OSError(f"Failed to load splits: {e}") from e
 
 
 def print_split_summary(splits: DatasetDict) -> None:
@@ -277,14 +278,14 @@ def print_split_summary(splits: DatasetDict) -> None:
 
     for split_name, split_data in splits.items():
         print(f"\n{split_name.upper()} Split:")
-        print(f"  Examples: {len(split_data)} ({len(split_data)/total_examples*100:.1f}%)")
+        print(f"  Examples: {len(split_data)} ({len(split_data) / total_examples * 100:.1f}%)")
 
         if "task_type" in split_data.column_names:
             task_types = split_data["task_type"]
             print("  Task distribution:")
             for task in sorted(set(task_types)):
                 count = task_types.count(task)
-                print(f"    - {task}: {count} ({count/len(task_types)*100:.1f}%)")
+                print(f"    - {task}: {count} ({count / len(task_types) * 100:.1f}%)")
 
         if "num_turns" in split_data.column_names:
             turns = split_data["num_turns"]
