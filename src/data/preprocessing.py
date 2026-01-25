@@ -362,8 +362,13 @@ def preprocess_dataset(
     # Preprocess examples
     preprocessed = []
     failed_count = 0
+    filtered_count = 0
 
     for idx, example in enumerate(dataset):
+        # Filter examples with wrong final answer
+        if not example.get("correct"):
+            filtered_count += 1
+            continue
         # Add index to example
         example["index"] = idx
 
@@ -381,6 +386,7 @@ def preprocess_dataset(
     if verbose:
         print("Preprocessing complete:")
         print(f"  - Processed: {len(preprocessed)} examples")
+        print(f"  - Filtered: {filtered_count} examples")
         print(f"  - Failed: {failed_count} examples")
         print(f"  - Success rate: {len(preprocessed) / len(dataset) * 100:.1f}%")
 
