@@ -51,7 +51,7 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 ### Technical Considerations
 - Use Hugging Face `datasets` library for loading
 - Check for class imbalance across task types
-- Identify examples with tool calls that need to be excluded
+- Use all dataset examples (including those with tool calls)
 - Verify that company profiles and conversations are properly paired
 
 ### Dependencies
@@ -92,7 +92,6 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 - Handle missing or null company fields gracefully
 - Ensure conversation ordering is preserved
 - Consider max sequence length constraints (1024-2048 tokens)
-- Track which examples are filtered out and why
 - Validate that all turns have proper role assignments
 
 ### Dependencies
