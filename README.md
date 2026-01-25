@@ -81,7 +81,6 @@ insurance-underwriting-llm/
 ├── notebooks/             # Jupyter notebooks for exploration
 ├── scripts/               # Executable scripts
 ├── configs/               # Configuration files
-├── docs/                  # Documentation
 └── scratchboard/          # Planning and user stories
 ```
 
@@ -109,25 +108,6 @@ ruff check .
 # Run pre-commit hooks
 pre-commit run --all-files
 ```
-
-## Project Phases
-
-This project is organized into 5 phases:
-
-1. **Phase 1: Environment & Data Setup** ✅ **COMPLETED**
-   - Development environment with `uv` and dependencies
-   - Data acquisition and exploration
-   - Preprocessing pipeline with company profile extraction
-   - Stratified train/validation/test splits
-   - Tokenization and formatting utilities
-   - PyTorch data loading with memory optimization
-
-2. **Phase 2: Baseline Evaluation** - Zero-shot and few-shot evaluation of base model
-3. **Phase 3: Model Finetuning** - LoRA/QLoRA fine-tuning implementation
-4. **Phase 4: Evaluation & Analysis** - Comprehensive performance analysis
-5. **Phase 5: Documentation & Showcase** - Polish and portfolio preparation
-
-See `scratchboard/` directory for detailed user stories for each phase.
 
 ## Dataset
 
