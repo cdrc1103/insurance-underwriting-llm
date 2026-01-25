@@ -28,7 +28,7 @@ def sample_tokenized_dataset():
 @pytest.fixture
 def sample_tokenizer():
     """Load a tokenizer for testing."""
-    return load_tokenizer("Qwen/Qwen2.5-1.5B-Instruct")
+    return load_tokenizer("Qwen/Qwen3-0.6B")
 
 
 def test_insurance_conversation_dataset(sample_tokenized_dataset):
@@ -121,7 +121,7 @@ def test_estimate_memory_usage():
     memory = estimate_memory_usage(
         batch_size=4,
         sequence_length=1024,
-        model_params=1_500_000_000,  # Qwen2.5-1.5B
+        model_params=600_000_000,  # Qwen3-0.6B
     )
 
     assert "model_gb" in memory
@@ -132,7 +132,7 @@ def test_estimate_memory_usage():
 
     # Check reasonable values
     assert memory["total_gb"] > 0
-    assert memory["total_gb"] < 100  # Should be less than 100GB for Qwen2.5-1.5B
+    assert memory["total_gb"] < 100  # Should be less than 100GB for Qwen3-0.6B
 
 
 def test_calculate_gradient_accumulation_steps():

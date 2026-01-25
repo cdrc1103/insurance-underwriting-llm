@@ -64,7 +64,7 @@ def main():
     print(f"   - Examples: {stats['num_examples']}")
     print(f"   - Avg turns: {stats['turns']['mean']:.1f}")
     print(f"   - Turn range: {stats['turns']['min']}-{stats['turns']['max']}")
-    print(f"   - Avg text length: {stats['text_length']['mean']:.0f} chars")
+    print(f"   - Avg text length: {stats['content_length']['mean']:.0f} chars")
 
     # Save preprocessed data
     print("\n4. Saving preprocessed data...")
