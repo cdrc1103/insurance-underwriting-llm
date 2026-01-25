@@ -1,11 +1,16 @@
 """Tokenization utilities for insurance underwriting conversations."""
 
+from typing import Any
+
+import numpy as np
 from datasets import Dataset
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
+from configs.model import QWEN_MAX_CONTEXT
+
 
 def load_tokenizer(
-    model_name: str = "Qwen/Qwen2.5-1.5B-Instruct",
+    model_name: str = "Qwen/Qwen3-0.6B",
     add_special_tokens: bool = True,
 ) -> PreTrainedTokenizer:
     """
@@ -40,18 +45,12 @@ def load_tokenizer(
         raise ValueError(f"Failed to load tokenizer '{model_name}': {e}") from e
 
 
-def format_conversation_for_training(
-    example: dict,
-    tokenizer: PreTrainedTokenizer,
-    max_length: int = 1024,
-) -> str:
+def format_conversation_for_training(example: dict[str, Any]) -> str:
     """
     Format a conversation example for training.
 
     Args:
         example: Preprocessed example with conversation
-        tokenizer: Tokenizer to use
-        max_length: Maximum sequence length
 
     Returns:
         Formatted text ready for tokenization
@@ -82,12 +81,12 @@ def format_conversation_for_training(
 
 
 def tokenize_example(
-    example: dict,
+    example: dict[str, Any],
     tokenizer: PreTrainedTokenizer,
     max_length: int = 1024,
     truncation: bool = True,
     padding: str = "max_length",
-) -> dict:
+) -> dict[str, Any]:
     """
     Tokenize a single example.
 
@@ -102,7 +101,7 @@ def tokenize_example(
         Dictionary with tokenized inputs
     """
     # Format conversation
-    text = format_conversation_for_training(example, tokenizer, max_length)
+    text = format_conversation_for_training(example)
 
     # Tokenize
     tokenized = tokenizer(
@@ -185,7 +184,7 @@ def tokenize_dataset(
 def compute_token_statistics(
     dataset: Dataset,
     tokenizer: PreTrainedTokenizer,
-) -> dict:
+) -> dict[str, Any]:
     """
     Compute token count statistics for a dataset.
 
@@ -196,8 +195,6 @@ def compute_token_statistics(
     Returns:
         Dictionary with token statistics
     """
-    import numpy as np
-
     # Check if already tokenized
     if "input_ids" in dataset.column_names:
         token_counts = [len(ids) for ids in dataset["input_ids"]]
@@ -205,7 +202,7 @@ def compute_token_statistics(
         # Tokenize on the fly to get counts
         token_counts = []
         for example in dataset:
-            text = format_conversation_for_training(example, tokenizer)
+            text = format_conversation_for_training(example)
             tokens = tokenizer(text, return_tensors=None)
             token_counts.append(len(tokens["input_ids"]))
 
@@ -229,6 +226,82 @@ def compute_token_statistics(
     return stats
 
 
+def mark_truncated_examples(
+    dataset: Dataset,
+    tokenizer: PreTrainedTokenizer,
+    max_length: int = QWEN_MAX_CONTEXT,
+    verbose: bool = True,
+) -> tuple[Dataset, dict[str, Any]]:
+    """
+    Mark examples that will be truncated during tokenization.
+
+    This function adds metadata columns to track which examples exceed the
+    maximum token length and by how much. The actual truncation happens
+    during tokenization - this provides visibility into what will be affected.
+
+    Args:
+        dataset: Dataset to analyze
+        tokenizer: Tokenizer to use for token counting
+        max_length: Maximum sequence length (default: Qwen3 32K context)
+        verbose: Whether to print truncation statistics
+
+    Returns:
+        Tuple of (dataset with truncation metadata, statistics dict)
+
+    Raises:
+        ValueError: If dataset is empty
+    """
+    if len(dataset) == 0:
+        raise ValueError("Cannot process empty dataset")
+
+    token_counts = []
+
+    # Compute token counts for each example
+    for example in dataset:
+        text = format_conversation_for_training(example)
+        tokens = tokenizer(text, return_tensors=None)
+        token_counts.append(len(tokens["input_ids"]))
+
+    # Determine truncation status for each example
+    will_truncate = [count > max_length for count in token_counts]
+    tokens_over_limit = [max(0, count - max_length) for count in token_counts]
+
+    # Add metadata columns to dataset
+    dataset = dataset.add_column("token_count", token_counts)
+    dataset = dataset.add_column("will_truncate", will_truncate)
+    dataset = dataset.add_column("tokens_over_limit", tokens_over_limit)
+
+    # Compute statistics
+    truncated_count = sum(will_truncate)
+    truncated_indices = [i for i, t in enumerate(will_truncate) if t]
+
+    stats = {
+        "max_length": max_length,
+        "total_examples": len(dataset),
+        "truncated_count": truncated_count,
+        "truncated_percentage": (truncated_count / len(dataset)) * 100,
+        "truncated_indices": truncated_indices,
+        "max_tokens_over": max(tokens_over_limit) if tokens_over_limit else 0,
+        "avg_tokens_over": (
+            sum(t for t in tokens_over_limit if t > 0) / truncated_count
+            if truncated_count > 0
+            else 0
+        ),
+    }
+
+    if verbose:
+        print(f"Truncation analysis (max_length={max_length}):")
+        print(f"  Total examples: {stats['total_examples']}")
+        print(
+            f"  Will be truncated: {stats['truncated_count']} ({stats['truncated_percentage']:.1f}%)"
+        )
+        if truncated_count > 0:
+            print(f"  Max tokens over limit: {stats['max_tokens_over']}")
+            print(f"  Avg tokens over limit: {stats['avg_tokens_over']:.0f}")
+
+    return dataset, stats
+
+
 def get_recommended_max_length(
     dataset: Dataset,
     tokenizer: PreTrainedTokenizer,
@@ -244,7 +317,13 @@ def get_recommended_max_length(
 
     Returns:
         Recommended max length
+
+    Raises:
+        ValueError: If percentile is not between 0 and 100
     """
+    if not 0 <= percentile <= 100:
+        raise ValueError(f"Percentile must be between 0 and 100, got {percentile}")
+
     stats = compute_token_statistics(dataset, tokenizer)
     percentile_key = f"{int(percentile)}th"
 
