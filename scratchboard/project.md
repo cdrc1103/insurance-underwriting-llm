@@ -20,7 +20,7 @@ Small pretrained models typically lack:
 ## Objectives
 
 ### Primary Goal
-Finetune Qwen2.5-1.5B-Instruct to handle multi-turn insurance underwriting conversations with tool-use capabilities using the Snorkel AI Multi-Turn Insurance Underwriting dataset.
+Finetune Qwen3-0.6B to handle multi-turn insurance underwriting conversations with tool-use capabilities using the Snorkel AI Multi-Turn Insurance Underwriting dataset.
 
 ### Success Criteria
 1. Model can maintain context across multiple conversation turns
@@ -51,15 +51,16 @@ Finetune Qwen2.5-1.5B-Instruct to handle multi-turn insurance underwriting conve
 
 ### Model Selection
 
-**Selected Model:** Qwen/Qwen2.5-1.5B-Instruct
+**Selected Model:** Qwen/Qwen3-0.6B
 
-**Why Qwen2.5-1.5B-Instruct?**
-- Modern architecture (RoPE, GQA, 128K context support)
+**Why Qwen3-0.6B?**
+- Modern architecture (RoPE, GQA, 32K context support)
+- **Hybrid thinking mode** - supports `<think>...</think>` tags for internal reasoning
 - Native function calling / tool-use support
 - Structured output (JSON, XML) generation
-- Trained on 18 trillion tokens
 - Apache 2.0 license
 - Fits on T4 16GB with QLoRA
+- Smaller footprint (0.6B) enables faster iteration and lower compute costs
 
 **Why NOT older architectures (GPT-2, OPT, Pythia)?**
 - No RoPE embeddings → worse position/context handling for multi-turn

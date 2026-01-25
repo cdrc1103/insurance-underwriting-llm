@@ -137,7 +137,7 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 **So that** preprocessed conversations can be efficiently fed into the training pipeline
 
 ### Acceptance Criteria
-- [ ] Tokenizer loaded for selected base model (Qwen2.5-1.5B-Instruct)
+- [ ] Tokenizer loaded for selected base model (Qwen3-0.6B)
 - [ ] Special tokens configured (BOS, EOS, padding, separation)
 - [ ] Conversation formatting implemented with proper role markers
 - [ ] Input-target pairs created for causal language modeling
@@ -150,7 +150,7 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 - [ ] Unit tests verify tokenization correctness
 
 ### Technical Considerations
-- Handle Qwen2.5-1.5B-Instruct tokenizer format and chat template
+- Handle Qwen3-0.6B tokenizer format and chat template
 - Ensure assistant responses are properly masked during training
 - Consider left-padding vs right-padding for decoder-only models
 - Validate that loss is only computed on assistant tokens
