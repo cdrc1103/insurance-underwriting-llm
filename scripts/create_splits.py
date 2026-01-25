@@ -53,8 +53,8 @@ def main():
     parser.add_argument(
         "--stratify-by",
         type=str,
-        default="task_type",
-        help="Field to stratify by (default: task_type)",
+        default="task",
+        help="Field to stratify by (default: task)",
     )
     parser.add_argument(
         "--random-seed",

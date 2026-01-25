@@ -8,63 +8,12 @@ from datasets import Dataset, DatasetDict
 from sklearn.model_selection import train_test_split
 
 
-def identify_task_type(example: dict) -> str:
-    """
-    Identify the task type of an example based on conversation content.
-
-    Args:
-        example: Preprocessed example
-
-    Returns:
-        Task type label
-
-    Note:
-        This is a heuristic-based approach. Adjust based on actual data.
-    """
-    if "conversation" not in example:
-        return "unknown"
-
-    # Get full conversation text
-    conversation_text = " ".join([turn.get("content", "") for turn in example["conversation"]])
-    conversation_lower = conversation_text.lower()
-
-    # Define task type keywords
-    if any(keyword in conversation_lower for keyword in ["appetite", "interested", "accept"]):
-        return "appetite_check"
-    elif any(keyword in conversation_lower for keyword in ["recommend", "product", "coverage"]):
-        return "product_recommendation"
-    elif any(keyword in conversation_lower for keyword in ["eligible", "eligibility", "qualify"]):
-        return "eligibility"
-    elif any(keyword in conversation_lower for keyword in ["auto", "automobile", "vehicle"]):
-        return "auto_lob"
-    else:
-        return "general"
-
-
-def add_task_types(dataset: Dataset) -> Dataset:
-    """
-    Add task type labels to dataset examples.
-
-    Args:
-        dataset: Dataset to label
-
-    Returns:
-        Dataset with task_type field added
-    """
-
-    def add_task_type(example):
-        example["task_type"] = identify_task_type(example)
-        return example
-
-    return dataset.map(add_task_type)
-
-
 def create_stratified_split(
     dataset: Dataset,
     train_size: float = 0.75,
     val_size: float = 0.125,
     test_size: float = 0.125,
-    stratify_by: str | None = "task_type",
+    stratify_by: str | None = "task",
     random_seed: int = 42,
 ) -> DatasetDict:
     """
@@ -75,23 +24,26 @@ def create_stratified_split(
         train_size: Proportion for training set
         val_size: Proportion for validation set
         test_size: Proportion for test set
-        stratify_by: Field to stratify by (None for random split)
+        stratify_by: Field to stratify by (None for random split, default: "task")
         random_seed: Random seed for reproducibility
 
     Returns:
         DatasetDict with train, validation, and test splits
 
     Raises:
-        ValueError: If split sizes don't sum to 1.0 or stratification fails
+        ValueError: If split sizes don't sum to 1.0 or stratify_by field is missing
     """
     # Validate split sizes
     total = train_size + val_size + test_size
     if not np.isclose(total, 1.0):
         raise ValueError(f"Split sizes must sum to 1.0, got {total}")
 
-    # Add task types if stratifying
-    if stratify_by == "task_type" and "task_type" not in dataset.column_names:
-        dataset = add_task_types(dataset)
+    # Validate stratification field exists
+    if stratify_by and stratify_by not in dataset.column_names:
+        raise ValueError(
+            f"Stratification field '{stratify_by}' not found in dataset. "
+            f"Available columns: {dataset.column_names}"
+        )
 
     # Get indices and stratification labels
     indices = list(range(len(dataset)))
@@ -150,15 +102,15 @@ def compute_split_statistics(split: Dataset, split_name: str) -> dict:
         "num_examples": len(split),
     }
 
-    # Task type distribution
-    if "task_type" in split.column_names:
-        task_types = split["task_type"]
+    # Task distribution
+    if "task" in split.column_names:
+        tasks = split["task"]
         task_distribution = {}
-        for task in set(task_types):
-            count = task_types.count(task)
+        for task in set(tasks):
+            count = tasks.count(task)
             task_distribution[task] = {
                 "count": count,
-                "percentage": count / len(task_types) * 100,
+                "percentage": count / len(tasks) * 100,
             }
         stats["task_distribution"] = task_distribution
 
@@ -280,12 +232,12 @@ def print_split_summary(splits: DatasetDict) -> None:
         print(f"\n{split_name.upper()} Split:")
         print(f"  Examples: {len(split_data)} ({len(split_data) / total_examples * 100:.1f}%)")
 
-        if "task_type" in split_data.column_names:
-            task_types = split_data["task_type"]
+        if "task" in split_data.column_names:
+            tasks = split_data["task"]
             print("  Task distribution:")
-            for task in sorted(set(task_types)):
-                count = task_types.count(task)
-                print(f"    - {task}: {count} ({count / len(task_types) * 100:.1f}%)")
+            for task in sorted(set(tasks)):
+                count = tasks.count(task)
+                print(f"    - {task}: {count} ({count / len(tasks) * 100:.1f}%)")
 
         if "num_turns" in split_data.column_names:
             turns = split_data["num_turns"]

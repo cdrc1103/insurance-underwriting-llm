@@ -6,10 +6,8 @@ import pytest
 from datasets import Dataset
 
 from src.data.splitting import (
-    add_task_types,
     compute_split_statistics,
     create_stratified_split,
-    identify_task_type,
     load_splits,
     print_split_summary,
     save_splits,
@@ -18,53 +16,20 @@ from src.data.splitting import (
 
 @pytest.fixture
 def sample_dataset():
-    """Create a sample dataset for testing."""
+    """Create a sample dataset for testing with task metadata."""
     data = {
-        "conversation": [
-            [{"content": "Check appetite for this company"}],
-            [{"content": "What products do you recommend?"}],
-            [{"content": "Is this business eligible?"}],
-            [{"content": "Tell me about auto insurance"}],
-            [{"content": "General question here"}],
+        "task": [
+            "Appetite Check",
+            "Product Recommendations",
+            "Eligibility",
+            "Auto LOB",
+            "General",
         ]
         * 10,  # 50 examples total
         "num_turns": [2, 3, 2, 4, 1] * 10,
         "formatted_text": ["text" * 50] * 50,
     }
     return Dataset.from_dict(data)
-
-
-def test_identify_task_type():
-    """Test task type identification."""
-    appetite_example = {"conversation": [{"content": "Check if we have appetite"}]}
-    product_example = {"conversation": [{"content": "What products should I recommend?"}]}
-    eligible_example = {"conversation": [{"content": "Is the company eligible?"}]}
-    auto_example = {"conversation": [{"content": "Need auto insurance"}]}
-    general_example = {"conversation": [{"content": "Random question"}]}
-
-    assert identify_task_type(appetite_example) == "appetite_check"
-    assert identify_task_type(product_example) == "product_recommendation"
-    assert identify_task_type(eligible_example) == "eligibility"
-    assert identify_task_type(auto_example) == "auto_lob"
-    assert identify_task_type(general_example) == "general"
-
-
-def test_identify_task_type_no_conversation():
-    """Test task type with missing conversation."""
-    example = {"no_conversation": True}
-    assert identify_task_type(example) == "unknown"
-
-
-def test_add_task_types(sample_dataset):
-    """Test adding task types to dataset."""
-    labeled_dataset = add_task_types(sample_dataset)
-
-    assert "task_type" in labeled_dataset.column_names
-    assert len(labeled_dataset) == len(sample_dataset)
-
-    # Check that we have multiple task types
-    task_types = set(labeled_dataset["task_type"])
-    assert len(task_types) > 1
 
 
 def test_create_stratified_split(sample_dataset):
@@ -109,6 +74,15 @@ def test_create_stratified_split_invalid_sizes(sample_dataset):
         )
 
 
+def test_create_stratified_split_missing_stratify_field(sample_dataset):
+    """Test splitting with missing stratification field."""
+    with pytest.raises(ValueError, match="Stratification field.*not found"):
+        create_stratified_split(
+            sample_dataset,
+            stratify_by="nonexistent_field",
+        )
+
+
 def test_create_stratified_split_reproducible(sample_dataset):
     """Test that splits are reproducible with same seed."""
     splits1 = create_stratified_split(sample_dataset, random_seed=42)
@@ -122,7 +96,7 @@ def test_create_stratified_split_reproducible(sample_dataset):
 def test_compute_split_statistics():
     """Test statistics computation."""
     data = {
-        "task_type": ["appetite_check", "product_recommendation", "appetite_check"],
+        "task": ["Appetite Check", "Product Recommendations", "Appetite Check"],
         "num_turns": [2, 3, 2],
         "formatted_text": ["short", "medium text", "short"],
     }
@@ -137,8 +111,8 @@ def test_compute_split_statistics():
     assert "text_length" in stats
 
     # Check task distribution
-    assert "appetite_check" in stats["task_distribution"]
-    assert stats["task_distribution"]["appetite_check"]["count"] == 2
+    assert "Appetite Check" in stats["task_distribution"]
+    assert stats["task_distribution"]["Appetite Check"]["count"] == 2
 
 
 def test_save_and_load_splits(sample_dataset, tmp_path):
