@@ -51,7 +51,7 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 ### Technical Considerations
 - Use Hugging Face `datasets` library for loading
 - Check for class imbalance across task types
-- Identify examples with tool calls that need to be excluded
+- Use all dataset examples (including those with tool calls)
 - Verify that company profiles and conversations are properly paired
 
 ### Dependencies
@@ -68,7 +68,7 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 ### Acceptance Criteria
 - [ ] Company profile extraction implemented (name, revenue, employees, industry, state)
 - [ ] Multi-turn conversation extraction with role labels (underwriter/assistant)
-- [ ] Tool calls and function calling segments excluded from conversations
+- [ ] Tool calls and function calling segments included for agent training
 - [ ] Text cleaning applied (normalize whitespace, handle special characters)
 - [ ] Industry classification extracted from business descriptions
 - [ ] Standardized input format implemented:
@@ -92,7 +92,6 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 - Handle missing or null company fields gracefully
 - Ensure conversation ordering is preserved
 - Consider max sequence length constraints (1024-2048 tokens)
-- Track which examples are filtered out and why
 - Validate that all turns have proper role assignments
 
 ### Dependencies
@@ -138,7 +137,7 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 **So that** preprocessed conversations can be efficiently fed into the training pipeline
 
 ### Acceptance Criteria
-- [ ] Tokenizer loaded for selected base model (GPT-2, Pythia, OPT, or TinyLlama)
+- [ ] Tokenizer loaded for selected base model (Qwen3-0.6B)
 - [ ] Special tokens configured (BOS, EOS, padding, separation)
 - [ ] Conversation formatting implemented with proper role markers
 - [ ] Input-target pairs created for causal language modeling
@@ -151,7 +150,7 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 - [ ] Unit tests verify tokenization correctness
 
 ### Technical Considerations
-- Handle models with different tokenizer formats (GPT-2 vs Llama)
+- Handle Qwen3-0.6B tokenizer format and chat template
 - Ensure assistant responses are properly masked during training
 - Consider left-padding vs right-padding for decoder-only models
 - Validate that loss is only computed on assistant tokens

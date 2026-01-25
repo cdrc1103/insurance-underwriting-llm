@@ -20,7 +20,7 @@ Small pretrained models typically lack:
 ## Objectives
 
 ### Primary Goal
-Finetune a small language model (< 1B parameters) to handle multi-turn insurance underwriting conversations using the Snorkel AI Multi-Turn Insurance Underwriting dataset.
+Finetune Qwen3-0.6B to handle multi-turn insurance underwriting conversations with tool-use capabilities using the Snorkel AI Multi-Turn Insurance Underwriting dataset.
 
 ### Success Criteria
 1. Model can maintain context across multiple conversation turns
@@ -51,18 +51,25 @@ Finetune a small language model (< 1B parameters) to handle multi-turn insurance
 
 ### Model Selection
 
-**Criteria:**
-- Small enough for free-tier GPU (< 1B parameters preferred)
-- Base model should NOT be heavily instruction-tuned for dialogue
-- Good candidate starting points with limited conversational ability
+**Selected Model:** Qwen/Qwen3-0.6B
 
-**Candidate Models:**
-- GPT-2 (124M - 355M params) - Pure language model, minimal dialogue training
-- Pythia (410M - 1B params) - Research-focused, limited instruction tuning
-- OPT-350M to OPT-1.3B - Decoder-only, basic pretraining
-- TinyLlama-1.1B - Compact Llama architecture, base version
+**Why Qwen3-0.6B?**
+- Modern architecture (RoPE, GQA, 32K context support)
+- **Hybrid thinking mode** - supports `<think>...</think>` tags for internal reasoning
+- Native function calling / tool-use support
+- Structured output (JSON, XML) generation
+- Apache 2.0 license
+- Fits on T4 16GB with QLoRA
+- Smaller footprint (0.6B) enables faster iteration and lower compute costs
 
-**Rationale:** Starting with a less conversationally-capable model better demonstrates the finetuning impact.
+**Why NOT older architectures (GPT-2, OPT, Pythia)?**
+- No RoPE embeddings → worse position/context handling for multi-turn
+- Older attention mechanisms → less efficient learning
+- Training recipes from 2019-2022 are inferior to modern techniques
+- 380 examples can't teach both domain knowledge AND conversational coherence
+- Fine-tuning can't fix fundamental architectural limitations
+
+**Rationale:** Using an instruction-tuned model for domain adaptation is what companies actually do in production. The project demonstrates teaching domain-specific tool usage, not basic conversation.
 
 ### Finetuning Strategy
 
@@ -87,7 +94,7 @@ Finetune a small language model (< 1B parameters) to handle multi-turn insurance
 **Data Preparation:**
 - Extract company information and conversation turns
 - Format as multi-turn dialogue (underwriter question → assistant response)
-- **Exclude tool calls** - focus purely on conversational responses
+- **Include tool calls** - train for domain-specific tool use
 - Create train/validation/test splits (e.g., 300/40/40)
 
 **Input Format:**
@@ -122,6 +129,7 @@ Assistant: [model response]
 
 ### In Scope
 ✅ Multi-turn dialogue generation
+✅ Tool calling for underwriting operations
 ✅ Company profile understanding
 ✅ Insurance domain knowledge adaptation
 ✅ Underwriting reasoning and recommendations
@@ -130,8 +138,7 @@ Assistant: [model response]
 ✅ Comparison of base model vs finetuned model
 
 ### Out of Scope
-❌ Tool calling / function calling capabilities
-❌ External API integrations
+❌ External API integrations (mock tools only)
 ❌ Retrieval-augmented generation (RAG)
 ❌ Full finetuning (only LoRA/QLoRA)
 ❌ Multi-agent systems
