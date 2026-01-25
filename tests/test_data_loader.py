@@ -77,21 +77,18 @@ def test_load_dataset_split_not_found(tmp_path):
         load_dataset_split(tmp_path, split_name="nonexistent")
 
 
-@patch("src.data.loader.load_dataset")
+@patch("src.data.dataset_io.load_dataset")
 def test_load_insurance_dataset_download(mock_load_dataset, mock_dataset_dict):
     """Test loading dataset from Hugging Face."""
     mock_load_dataset.return_value = mock_dataset_dict
 
-    dataset = load_insurance_dataset(
-        dataset_name="test/dataset",
-        force_download=True,
-    )
+    dataset = load_insurance_dataset(dataset_name="test/dataset")
 
     assert isinstance(dataset, DatasetDict)
     mock_load_dataset.assert_called_once_with("test/dataset")
 
 
-@patch("src.data.loader.load_from_disk")
+@patch("src.data.dataset_io.load_from_disk")
 def test_load_insurance_dataset_from_cache(mock_load_from_disk, mock_dataset_dict, tmp_path):
     """Test loading dataset from cache."""
     # Create fake cache directory
@@ -100,16 +97,13 @@ def test_load_insurance_dataset_from_cache(mock_load_from_disk, mock_dataset_dic
 
     mock_load_from_disk.return_value = mock_dataset_dict
 
-    dataset = load_insurance_dataset(
-        cache_dir=tmp_path,
-        force_download=False,
-    )
+    dataset = load_insurance_dataset(cache_dir=tmp_path)
 
     assert isinstance(dataset, DatasetDict)
     mock_load_from_disk.assert_called_once()
 
 
-@patch("src.data.loader.load_dataset")
+@patch("src.data.dataset_io.load_dataset")
 def test_load_insurance_dataset_error(mock_load_dataset):
     """Test error handling when dataset cannot be loaded."""
     mock_load_dataset.side_effect = Exception("Network error")

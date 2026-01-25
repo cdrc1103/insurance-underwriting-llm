@@ -172,28 +172,19 @@ def format_conversation_prompt(
     return "\n".join(profile_lines)
 
 
-def preprocess_example(
-    example: dict[str, Any], include_tool_calls: bool = True
-) -> dict[str, Any] | None:
+def preprocess_example(example: dict[str, Any]) -> dict[str, Any] | None:
     """
     Preprocess a single example.
 
     Args:
         example: Raw dataset example
-        include_tool_calls: If True, include examples with tool calls.
-            Default is True since we're training Qwen2.5-1.5B-Instruct
-            for domain-specific tool use in insurance underwriting.
 
     Returns:
-        Preprocessed example or None if example should be filtered
+        Preprocessed example or None if example cannot be processed
 
     Raises:
         ValueError: If example cannot be processed
     """
-    # Filter tool calls if requested
-    if not include_tool_calls and has_tool_calls(example):
-        return None
-
     try:
         # Extract company profile
         company_profile = extract_company_profile(example)
@@ -224,7 +215,6 @@ def preprocess_example(
 
 def preprocess_dataset(
     dataset: Dataset,
-    include_tool_calls: bool = True,
     verbose: bool = True,
 ) -> Dataset:
     """
@@ -232,9 +222,6 @@ def preprocess_dataset(
 
     Args:
         dataset: Raw dataset to preprocess
-        include_tool_calls: If True, include examples with tool calls.
-            Default is True since we're training Qwen2.5-1.5B-Instruct
-            for domain-specific tool use in insurance underwriting.
         verbose: If True, print preprocessing statistics
 
     Returns:
@@ -248,28 +235,28 @@ def preprocess_dataset(
 
     # Preprocess examples
     preprocessed = []
-    filtered_count = 0
+    failed_count = 0
 
     for idx, example in enumerate(dataset):
         # Add index to example
         example["index"] = idx
 
         # Preprocess
-        processed = preprocess_example(example, include_tool_calls=include_tool_calls)
+        processed = preprocess_example(example)
 
         if processed is not None:
             preprocessed.append(processed)
         else:
-            filtered_count += 1
+            failed_count += 1
 
     if not preprocessed:
         raise ValueError("All examples were filtered during preprocessing")
 
     if verbose:
         print("Preprocessing complete:")
-        print(f"  - Kept: {len(preprocessed)} examples")
-        print(f"  - Filtered: {filtered_count} examples")
-        print(f"  - Retention rate: {len(preprocessed) / len(dataset) * 100:.1f}%")
+        print(f"  - Processed: {len(preprocessed)} examples")
+        print(f"  - Failed: {failed_count} examples")
+        print(f"  - Success rate: {len(preprocessed) / len(dataset) * 100:.1f}%")
 
     # Convert to Dataset
     return Dataset.from_list(preprocessed)

@@ -33,17 +33,6 @@ def main():
         default=project_root / "data",
         help="Directory for dataset cache",
     )
-    parser.add_argument(
-        "--include-tool-calls",
-        action="store_true",
-        help="Include examples with tool calls",
-    )
-    parser.add_argument(
-        "--force-download",
-        action="store_true",
-        help="Force re-download of dataset",
-    )
-
     args = parser.parse_args()
 
     print("=" * 80)
@@ -53,10 +42,7 @@ def main():
     # Load dataset
     print("\n1. Loading dataset...")
     try:
-        dataset_dict = load_insurance_dataset(
-            cache_dir=args.cache_dir,
-            force_download=args.force_download,
-        )
+        dataset_dict = load_insurance_dataset(cache_dir=args.cache_dir)
         dataset = dataset_dict["train"]
         print(f"   Loaded {len(dataset)} examples")
     except Exception as e:
@@ -66,11 +52,7 @@ def main():
     # Preprocess dataset
     print("\n2. Preprocessing dataset...")
     try:
-        preprocessed = preprocess_dataset(
-            dataset,
-            include_tool_calls=args.include_tool_calls,
-            verbose=True,
-        )
+        preprocessed = preprocess_dataset(dataset, verbose=True)
     except Exception as e:
         print(f"Error preprocessing dataset: {e}")
         return 1

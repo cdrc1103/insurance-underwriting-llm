@@ -134,17 +134,11 @@ def test_preprocess_example(sample_example):
 
 
 def test_preprocess_example_with_tool_calls(sample_with_tool_calls):
-    """Test preprocessing filters tool calls."""
-    result = preprocess_example(sample_with_tool_calls, include_tool_calls=False)
-
-    assert result is None
-
-
-def test_preprocess_example_include_tool_calls(sample_with_tool_calls):
-    """Test preprocessing includes tool calls when requested."""
-    result = preprocess_example(sample_with_tool_calls, include_tool_calls=True)
+    """Test preprocessing includes examples with tool calls."""
+    result = preprocess_example(sample_with_tool_calls)
 
     assert result is not None
+    assert "formatted_text" in result
 
 
 def test_preprocess_dataset():
@@ -164,17 +158,18 @@ def test_preprocess_dataset():
     assert "formatted_text" in preprocessed[0]
 
 
-def test_preprocess_dataset_empty_after_filtering():
-    """Test preprocessing with all examples filtered."""
+def test_preprocess_dataset_with_tool_calls():
+    """Test preprocessing dataset with tool call examples."""
     data = {
         "company_name": ["Company A"],
-        "messages": [[{"role": "user", "content": "tool_call here"}]],
+        "messages": [[{"role": "user", "content": "Check tool_call here"}]],
     }
 
     dataset = Dataset.from_dict(data)
+    preprocessed = preprocess_dataset(dataset, verbose=False)
 
-    with pytest.raises(ValueError, match="All examples were filtered"):
-        preprocess_dataset(dataset, include_tool_calls=False, verbose=False)
+    assert len(preprocessed) == 1
+    assert "formatted_text" in preprocessed[0]
 
 
 def test_get_preprocessing_stats():

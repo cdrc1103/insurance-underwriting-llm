@@ -8,7 +8,6 @@ from datasets import Dataset, DatasetDict, load_dataset, load_from_disk
 def load_insurance_dataset(
     dataset_name: str = "snorkelai/Multi-Turn-Insurance-Underwriting",
     cache_dir: Path | None = None,
-    force_download: bool = False,
 ) -> DatasetDict:
     """
     Load the insurance underwriting dataset from Hugging Face.
@@ -16,7 +15,6 @@ def load_insurance_dataset(
     Args:
         dataset_name: Name of the dataset on Hugging Face Hub
         cache_dir: Optional directory to cache the dataset
-        force_download: If True, re-download even if cached
 
     Returns:
         DatasetDict containing the train split
@@ -25,7 +23,7 @@ def load_insurance_dataset(
         ValueError: If dataset cannot be loaded
     """
     try:
-        if cache_dir and not force_download:
+        if cache_dir:
             cache_path = cache_dir / "raw" / "insurance_underwriting"
             if cache_path.exists():
                 print(f"Loading dataset from cache: {cache_path}")
