@@ -162,37 +162,27 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 
 ---
 
-## User Story 1.6: Dataset Validation for Unsloth Training
+## User Story 1.6: PyTorch Hyperparameter Calculation
 
 **As a** ML engineer
-**I want to** validate that the dataset is properly formatted for Unsloth's SFTTrainer
-**So that** fine-tuning can proceed smoothly without format errors
+**I want to** calculate optimal PyTorch training hyperparameters
+**So that** I can implement a custom training loop with properly tuned settings
 
 ### Acceptance Criteria
-- [ ] Dataset format validation completed:
-  - All examples contain `messages` field in ChatML format
-  - Messages have correct role labels (system, user, assistant, tool)
-  - No empty or malformed message sequences
-- [ ] Sample dataset loading test with Unsloth-compatible format:
-  - Load train/val/test splits successfully
-  - Verify HuggingFace Dataset compatibility
-  - Test that tokenizer's `apply_chat_template` works correctly
-- [ ] Training configuration parameters documented:
-  - Recommended max_seq_length (from US 1.5)
-  - Suggested batch size for T4 16GB (typically 2-4)
-  - Gradient accumulation steps for effective batch size
-- [ ] Dataset statistics summary created:
-  - Total examples per split
-  - Task distribution per split
-  - Token distribution per split
-- [ ] Unit tests verify dataset integrity
+- [ ] PyTorch hyperparameter calculation:
+  - Batch size calculated based on GPU memory constraints
+  - Gradient accumulation steps determined for target effective batch size
+  - Learning rate, optimizer (AdamW), and scheduler (cosine) configured
+  - Memory estimates computed for model, optimizer states, and activations
+
+- [ ] Unit tests verify hyperparameter calculations
 
 ### Technical Considerations
-- Unsloth's SFTTrainer expects raw `messages` field, not pre-tokenized data
-- Tokenization happens during training with optimizations
-- No custom PyTorch DataLoader needed (Unsloth handles this internally)
-- Validate chat template produces expected format for Qwen3
-- Document any dataset quirks (tool calls, thinking tags, etc.)
+- Custom PyTorch training loop will be implemented (not using high-level trainers)
+- Calculate optimal batch size based on sequence length and available GPU memory
+- Configure PyTorch AdamW optimizer with appropriate betas and weight decay
+- Set up cosine annealing scheduler with linear warmup
+- Document all calculated hyperparameters for training script implementation
 
 ### Dependencies
 - User Story 1.5 (Token Analysis)
