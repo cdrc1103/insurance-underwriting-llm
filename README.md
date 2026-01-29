@@ -138,6 +138,53 @@ This configuration covers 95% of training examples without truncation while main
 
 For detailed token analysis, see [notebooks/03_token_analysis.ipynb](notebooks/03_token_analysis.ipynb).
 
+### Training Configuration
+
+Calculated hyperparameters for T4 16GB GPU (custom PyTorch training):
+
+```python
+# Model configuration
+model_name = "Qwen/Qwen3-0.6B"
+max_seq_length = 21486  # Based on 95th percentile
+
+# Batch configuration (calculated for memory efficiency)
+per_device_train_batch_size = 4  # Calculated based on GPU memory
+gradient_accumulation_steps = 2
+effective_batch_size = 8
+
+# PyTorch Optimizer (AdamW)
+optimizer = "AdamW"
+learning_rate = 2.00e-04
+weight_decay = 0.01
+adam_beta1 = 0.9
+adam_beta2 = 0.999
+max_grad_norm = 1.0
+
+# PyTorch Scheduler (Cosine with warmup)
+scheduler = "cosine"
+num_train_epochs = 3
+warmup_steps = 8
+min_lr_ratio = 0.1
+
+# Mixed precision
+use_fp16 = True  # T4 supports FP16
+use_bf16 = False  # T4 doesn't support BF16
+
+# LoRA configuration (PEFT)
+lora_r = 16
+lora_alpha = 32
+lora_dropout = 0.05
+lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
+                       "gate_proj", "up_proj", "down_proj"]
+```
+
+**Implementation Approach:**
+- Custom PyTorch training loop for full control and showcase
+- Manual implementation of gradient accumulation
+- Cosine annealing scheduler with warmup
+- FP16 mixed precision training
+- LoRA adapters via PEFT library
+
 ## Technology Stack
 
 - **ML Framework**: PyTorch, Hugging Face Transformers
