@@ -113,6 +113,78 @@ pre-commit run --all-files
 
 This project uses the [Multi-Turn Insurance Underwriting dataset](https://huggingface.co/datasets/snorkelai/Multi-Turn-Insurance-Underwriting) from Hugging Face, containing ~380 multi-turn conversations about insurance underwriting scenarios.
 
+### Dataset Splits
+
+The dataset has been preprocessed and split into:
+- **Train**: 222 examples (75%)
+- **Validation**: 37 examples (12.5%)
+- **Test**: 37 examples (12.5%)
+
+Splits are stratified by task type to ensure balanced representation across all sets.
+
+### Token Analysis
+
+Token distribution analysis using the Qwen3-0.6B tokenizer (vocab size: 151,643):
+
+| Split | Mean Tokens | Median Tokens | Min | Max | 95th Percentile |
+|-------|------------|---------------|-----|-----|-----------------|
+| Train | 5,425 | 2,442 | 472 | 64,258 | 21,486 |
+| Validation | 4,087 | 2,119 | 804 | 20,415 | 16,625 |
+| Test | 5,431 | 2,564 | 1,205 | 29,997 | 22,295 |
+
+**Recommended max_length**: 21,486 tokens (based on 95th percentile of training set)
+
+This configuration covers 95% of training examples without truncation while maintaining memory efficiency on T4 16GB GPUs. Only ~5% of examples across all splits will be truncated at this length.
+
+For detailed token analysis, see [notebooks/03_token_analysis.ipynb](notebooks/03_token_analysis.ipynb).
+
+### Training Configuration
+
+Calculated hyperparameters for T4 16GB GPU (custom PyTorch training):
+
+```python
+# Model configuration
+model_name = "Qwen/Qwen3-0.6B"
+max_seq_length = 21486  # Based on 95th percentile
+
+# Batch configuration (calculated for memory efficiency)
+per_device_train_batch_size = 4  # Calculated based on GPU memory
+gradient_accumulation_steps = 2
+effective_batch_size = 8
+
+# PyTorch Optimizer (AdamW)
+optimizer = "AdamW"
+learning_rate = 2.00e-04
+weight_decay = 0.01
+adam_beta1 = 0.9
+adam_beta2 = 0.999
+max_grad_norm = 1.0
+
+# PyTorch Scheduler (Cosine with warmup)
+scheduler = "cosine"
+num_train_epochs = 3
+warmup_steps = 8
+min_lr_ratio = 0.1
+
+# Mixed precision
+use_fp16 = True  # T4 supports FP16
+use_bf16 = False  # T4 doesn't support BF16
+
+# LoRA configuration (PEFT)
+lora_r = 16
+lora_alpha = 32
+lora_dropout = 0.05
+lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
+                       "gate_proj", "up_proj", "down_proj"]
+```
+
+**Implementation Approach:**
+- Custom PyTorch training loop for full control and showcase
+- Manual implementation of gradient accumulation
+- Cosine annealing scheduler with warmup
+- FP16 mixed precision training
+- LoRA adapters via PEFT library
+
 ## Technology Stack
 
 - **ML Framework**: PyTorch, Hugging Face Transformers

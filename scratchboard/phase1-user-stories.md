@@ -130,31 +130,31 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 
 ---
 
-## User Story 1.5: Tokenization and Formatting for Training
+## User Story 1.5: Token Analysis and Max Length Determination
 
 **As a** ML engineer
-**I want to** implement tokenization and formatting for the selected base model
-**So that** preprocessed conversations can be efficiently fed into the training pipeline
+**I want to** analyze token distributions and determine optimal max_length for training
+**So that** I can configure Unsloth training parameters appropriately
 
 ### Acceptance Criteria
 - [ ] Tokenizer loaded for selected base model (Qwen3-0.6B)
-- [ ] Special tokens configured (BOS, EOS, padding, separation)
-- [ ] Conversation formatting implemented with proper role markers
-- [ ] Input-target pairs created for causal language modeling
-- [ ] Attention masks and position IDs generated correctly
-- [ ] Sequence length handling implemented:
-  - Truncation for sequences exceeding max length
-  - Padding for batch creation
-- [ ] Token count statistics computed for all splits
-- [ ] Formatted datasets saved for training
-- [ ] Unit tests verify tokenization correctness
+- [ ] Token count statistics computed for all splits (train/val/test):
+  - Mean, median, min, max token counts
+  - Percentile distribution (25th, 50th, 75th, 90th, 95th, 99th)
+- [ ] Recommended max_length determined (based on 95th percentile)
+- [ ] Truncation analysis completed:
+  - Number of examples that will be truncated at recommended max_length
+  - Average tokens over limit for truncated examples
+- [ ] Token statistics documented in analysis notebook
+- [ ] Edge cases identified (very long conversations)
+- [ ] Unit tests verify tokenization utilities work correctly
 
 ### Technical Considerations
-- Handle Qwen3-0.6B tokenizer format and chat template
-- Ensure assistant responses are properly masked during training
-- Consider left-padding vs right-padding for decoder-only models
-- Validate that loss is only computed on assistant tokens
-- Check for tokenization edge cases (very long inputs)
+- Use existing tokenization utilities in `src/data/tokenization.py`
+- Balance between coverage (few truncated examples) and efficiency (shorter sequences)
+- Qwen3 supports up to 32K tokens, but typical training uses 2K-8K
+- Consider memory constraints for batch size planning
+- Document which examples will be truncated for manual review
 
 ### Dependencies
 - User Story 1.4 (Train/Validation/Test Splits)
@@ -162,31 +162,30 @@ Phase 1 establishes the foundational infrastructure for the insurance underwriti
 
 ---
 
-## User Story 1.6: Data Loading and Batching Utilities
+## User Story 1.6: PyTorch Hyperparameter Calculation
 
 **As a** ML engineer
-**I want to** implement efficient data loading and batching utilities
-**So that** training can utilize the GPU efficiently without memory issues
+**I want to** calculate optimal PyTorch training hyperparameters
+**So that** I can implement a custom training loop with properly tuned settings
 
 ### Acceptance Criteria
-- [ ] PyTorch `Dataset` class implemented for insurance conversations
-- [ ] `DataLoader` configured with appropriate batch size (4-8) and workers
-- [ ] Dynamic batching implemented to group similar-length sequences
-- [ ] Gradient accumulation strategy defined for effective batch size
-- [ ] Data augmentation strategies considered (if applicable)
-- [ ] Memory profiling completed to verify GPU fit
-- [ ] Sample batches visualized to verify correctness
-- [ ] Unit tests verify batch composition and shapes
+- [ ] PyTorch hyperparameter calculation:
+  - Batch size calculated based on GPU memory constraints
+  - Gradient accumulation steps determined for target effective batch size
+  - Learning rate, optimizer (AdamW), and scheduler (cosine) configured
+  - Memory estimates computed for model, optimizer states, and activations
+
+- [ ] Unit tests verify hyperparameter calculations
 
 ### Technical Considerations
-- Use `transformers.DataCollatorForLanguageModeling` or custom collator
-- Implement dynamic padding to minimize wasted computation
-- Configure pin_memory for faster GPU transfer
-- Test with target hardware constraints (T4 16GB)
-- Monitor batch preparation time vs GPU utilization
+- Custom PyTorch training loop will be implemented (not using high-level trainers)
+- Calculate optimal batch size based on sequence length and available GPU memory
+- Configure PyTorch AdamW optimizer with appropriate betas and weight decay
+- Set up cosine annealing scheduler with linear warmup
+- Document all calculated hyperparameters for training script implementation
 
 ### Dependencies
-- User Story 1.5 (Tokenization and Formatting)
+- User Story 1.5 (Token Analysis)
 
 ---
 
@@ -203,9 +202,10 @@ All user stories (1.1-1.6) must be completed with:
 
 ## Phase 1 Success Metrics
 
-- Clean, reproducible dataset ready for training
+- Clean, reproducible dataset ready for training (messages format)
 - Data preprocessing pipeline handles all 380 examples successfully
 - Train/val/test splits are balanced and representative
-- Tokenized data fits in memory and loads efficiently
+- Token analysis completed with recommended max_length determined
+- Dataset validated for Unsloth SFTTrainer compatibility
 - All utilities are tested and documented
 - Setup can be reproduced by following README instructions

@@ -5,7 +5,7 @@ from datasets import Dataset
 
 from src.data.tokenization import (
     compute_token_statistics,
-    format_conversation_for_training,
+    format_messages_for_tokenization,
     get_recommended_max_length,
     load_tokenizer,
     mark_truncated_examples,
@@ -22,21 +22,17 @@ def sample_tokenizer():
 
 @pytest.fixture
 def sample_example():
-    """Create a sample preprocessed example."""
+    """Create a sample preprocessed example with messages."""
     return {
-        "company_profile": {
-            "company_name": "Test Corp",
-            "annual_revenue": "$1M",
-            "number_of_employees": "50",
-            "industry": "Tech",
-            "state": "CA",
-        },
-        "conversation": [
+        "messages": [
+            {"role": "system", "content": "You are an insurance underwriting co-pilot."},
             {"role": "user", "content": "What insurance do we need?"},
-            {"role": "assistant", "content": "Based on your profile, I recommend..."},
+            {
+                "role": "assistant",
+                "content": "Based on your profile, I recommend general liability and property coverage.",
+            },
         ],
-        "formatted_text": "Company Profile:\n- Name: Test Corp\n...",
-        "num_turns": 2,
+        "num_turns": 3,
         "original_index": 0,
     }
 
@@ -56,14 +52,31 @@ def test_load_tokenizer_invalid():
         load_tokenizer("nonexistent-model-xyz")
 
 
-def test_format_conversation_for_training(sample_example):
-    """Test conversation formatting."""
-    text = format_conversation_for_training(sample_example)
+def test_format_messages_for_tokenization(sample_example, sample_tokenizer):
+    """Test messages formatting using chat template."""
+    text = format_messages_for_tokenization(sample_example["messages"], sample_tokenizer)
 
     assert isinstance(text, str)
     assert len(text) > 0
-    # Should use formatted_text if available
-    assert "Company Profile" in text or "Test Corp" in text
+    # Should contain message content
+    assert "insurance" in text.lower()
+
+
+def test_format_messages_for_tokenization_empty(sample_tokenizer):
+    """Test that empty messages list raises ValueError."""
+    with pytest.raises(ValueError, match="Messages list cannot be empty"):
+        format_messages_for_tokenization([], sample_tokenizer)
+
+
+def test_tokenize_example_missing_messages(sample_tokenizer):
+    """Test that example without messages field raises ValueError."""
+    invalid_example = {
+        "num_turns": 1,
+        "original_index": 0,
+    }
+
+    with pytest.raises(ValueError, match="Example must contain 'messages' field"):
+        tokenize_example(invalid_example, sample_tokenizer)
 
 
 def test_tokenize_example(sample_example, sample_tokenizer):
@@ -87,13 +100,16 @@ def test_tokenize_example(sample_example, sample_tokenizer):
 
     # Check metadata
     assert tokenized["original_index"] == 0
-    assert tokenized["num_turns"] == 2
+    assert tokenized["num_turns"] == 3
 
 
 def test_tokenize_dataset(sample_tokenizer):
     """Test dataset tokenization."""
     data = {
-        "formatted_text": ["Short text", "Another short text"],
+        "messages": [
+            [{"role": "user", "content": "Short text"}],
+            [{"role": "user", "content": "Another short text"}],
+        ],
         "num_turns": [1, 2],
         "original_index": [0, 1],
     }
@@ -116,7 +132,7 @@ def test_tokenize_dataset(sample_tokenizer):
 def test_compute_token_statistics(sample_tokenizer):
     """Test token statistics computation."""
     data = {
-        "formatted_text": ["Short text"] * 10,
+        "messages": [[{"role": "user", "content": "Short text"}]] * 10,
         "num_turns": [1] * 10,
     }
 
@@ -135,7 +151,10 @@ def test_compute_token_statistics(sample_tokenizer):
 def test_get_recommended_max_length(sample_tokenizer):
     """Test recommended max length calculation."""
     data = {
-        "formatted_text": ["Short text"] * 5 + ["Much longer text " * 50] * 5,
+        "messages": (
+            [[{"role": "user", "content": "Short text"}]] * 5
+            + [[{"role": "user", "content": "Much longer text " * 50}]] * 5
+        ),
         "num_turns": [1] * 10,
     }
 
@@ -149,7 +168,7 @@ def test_get_recommended_max_length(sample_tokenizer):
 def test_get_recommended_max_length_invalid_percentile(sample_tokenizer):
     """Test that invalid percentile raises ValueError."""
     data = {
-        "formatted_text": ["Short text"],
+        "messages": [[{"role": "user", "content": "Short text"}]],
         "num_turns": [1],
     }
 
@@ -169,7 +188,11 @@ def test_mark_truncated_examples(sample_tokenizer):
     long_text = "Very long text. " * 100  # ~300 tokens
 
     data = {
-        "formatted_text": [short_text, long_text, short_text],
+        "messages": [
+            [{"role": "user", "content": short_text}],
+            [{"role": "user", "content": long_text}],
+            [{"role": "user", "content": short_text}],
+        ],
         "num_turns": [1, 1, 1],
     }
 
@@ -201,7 +224,7 @@ def test_mark_truncated_examples(sample_tokenizer):
 def test_mark_truncated_examples_empty_dataset(sample_tokenizer):
     """Test that empty dataset raises ValueError."""
     data = {
-        "formatted_text": [],
+        "messages": [],
         "num_turns": [],
     }
 
@@ -214,7 +237,10 @@ def test_mark_truncated_examples_empty_dataset(sample_tokenizer):
 def test_mark_truncated_examples_no_truncation(sample_tokenizer):
     """Test when no examples need truncation."""
     data = {
-        "formatted_text": ["Short text", "Another short"],
+        "messages": [
+            [{"role": "user", "content": "Short text"}],
+            [{"role": "user", "content": "Another short"}],
+        ],
         "num_turns": [1, 1],
     }
 
