@@ -36,6 +36,12 @@ source .venv/bin/activate
 - Prefer composition over inheritance
 - Keep classes focused and single-purpose
 
+**Minimal Code Changes**
+- Make only the changes necessary to achieve the specific goal
+- Avoid refactoring, reformatting, or "improving" code that's not directly related to the task
+- Don't add extra features, error handling, or abstractions beyond what's required
+- If fixing a bug, change only what's needed for the fix - don't clean up surrounding code
+
 ### Naming Conventions
 
 | Element | Convention | Example |

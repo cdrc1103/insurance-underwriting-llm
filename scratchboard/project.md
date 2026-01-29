@@ -148,14 +148,7 @@ Assistant: [model response]
 
 ## Evaluation Metrics
 
-### Quantitative
-1. **Perplexity** on validation/test conversations
-2. **ROUGE scores** (R-1, R-2, R-L) comparing generated vs reference responses
-3. **BLEU score** for response quality
-4. **Exact match** for binary decisions (in appetite / not in appetite)
-5. **F1 score** for classification tasks
-
-### Qualitative
+### Qualitative (Model as a Judge)
 1. Conversational coherence across turns
 2. Factual accuracy of recommendations
 3. Domain terminology usage
@@ -214,7 +207,6 @@ Assistant: [model response]
 - `torch` - PyTorch backend
 - `wandb` or `tensorboard` - Training monitoring
 - `evaluate` - Metrics computation
-- `rouge_score`, `sacrebleu` - Text generation metrics
 
 **Development:**
 - Python 3.9+

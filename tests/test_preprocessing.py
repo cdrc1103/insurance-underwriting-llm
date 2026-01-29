@@ -372,7 +372,7 @@ def test_preprocess_dataset():
         "lob": ["property", "auto"],
         "task": ["Appetite Check", "Policy Limits"],
         "reference answer": ["In appetite", "Limit: $1M"],
-        "correct": [True, False],
+        "correct": [True, True],
         "trace": [
             [{"role": "user", "content": "Question 1", "type": "underwriter", "tool_calls": ""}],
             [{"role": "user", "content": "Question 2", "type": "underwriter", "tool_calls": ""}],

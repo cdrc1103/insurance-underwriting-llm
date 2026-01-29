@@ -11,14 +11,12 @@ from configs.model import QWEN_MAX_CONTEXT
 
 def load_tokenizer(
     model_name: str = "Qwen/Qwen3-0.6B",
-    add_special_tokens: bool = True,
 ) -> PreTrainedTokenizer:
     """
     Load and configure tokenizer for a language model.
 
     Args:
         model_name: Name or path of the model
-        add_special_tokens: Whether to add special tokens
 
     Returns:
         Configured tokenizer
@@ -33,51 +31,43 @@ def load_tokenizer(
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        # Add special tokens if requested
-        if add_special_tokens:
-            # Add tokens for conversation roles if not present
-            special_tokens = {"additional_special_tokens": ["[USER]", "[ASSISTANT]", "[COMPANY]"]}
-            tokenizer.add_special_tokens(special_tokens)
-
         return tokenizer
 
     except Exception as e:
         raise ValueError(f"Failed to load tokenizer '{model_name}': {e}") from e
 
 
-def format_conversation_for_training(example: dict[str, Any]) -> str:
+def format_messages_for_tokenization(
+    messages: list[dict[str, str]],
+    tokenizer: PreTrainedTokenizer,
+) -> str:
     """
-    Format a conversation example for training.
+    Format messages using the tokenizer's chat template.
 
     Args:
-        example: Preprocessed example with conversation
+        messages: List of message dicts with 'role' and 'content' keys
+        tokenizer: Tokenizer with chat template support
 
     Returns:
         Formatted text ready for tokenization
+
+    Raises:
+        ValueError: If messages format is invalid
     """
-    # Start with formatted text from preprocessing
-    if "formatted_text" in example:
-        return example["formatted_text"]
+    if not messages:
+        raise ValueError("Messages list cannot be empty")
 
-    # Fallback: build from conversation
-    parts = []
-
-    # Add company profile if available
-    if "company_profile" in example:
-        profile = example["company_profile"]
-        parts.append("Company Profile:")
-        for key, value in profile.items():
-            parts.append(f"- {key.replace('_', ' ').title()}: {value}")
-        parts.append("\nConversation:")
-
-    # Add conversation turns
-    if "conversation" in example:
-        for turn in example["conversation"]:
-            role = turn.get("role", "unknown").capitalize()
-            content = turn.get("content", "")
-            parts.append(f"{role}: {content}")
-
-    return "\n".join(parts)
+    # Use tokenizer's chat template to format messages
+    # Qwen3 tokenizers have built-in ChatML template support
+    try:
+        formatted = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=False,
+        )
+        return formatted
+    except Exception as e:
+        raise ValueError(f"Failed to format messages with chat template: {e}") from e
 
 
 def tokenize_example(
@@ -91,7 +81,7 @@ def tokenize_example(
     Tokenize a single example.
 
     Args:
-        example: Example to tokenize
+        example: Example with 'messages' field (ChatML format)
         tokenizer: Tokenizer to use
         max_length: Maximum sequence length
         truncation: Whether to truncate long sequences
@@ -99,9 +89,15 @@ def tokenize_example(
 
     Returns:
         Dictionary with tokenized inputs
+
+    Raises:
+        ValueError: If example is missing 'messages' field
     """
-    # Format conversation
-    text = format_conversation_for_training(example)
+    if "messages" not in example:
+        raise ValueError("Example must contain 'messages' field")
+
+    # Format messages using chat template
+    text = format_messages_for_tokenization(example["messages"], tokenizer)
 
     # Tokenize
     tokenized = tokenizer(
@@ -202,7 +198,7 @@ def compute_token_statistics(
         # Tokenize on the fly to get counts
         token_counts = []
         for example in dataset:
-            text = format_conversation_for_training(example)
+            text = format_messages_for_tokenization(example["messages"], tokenizer)
             tokens = tokenizer(text, return_tensors=None)
             token_counts.append(len(tokens["input_ids"]))
 
@@ -258,7 +254,7 @@ def mark_truncated_examples(
 
     # Compute token counts for each example
     for example in dataset:
-        text = format_conversation_for_training(example)
+        text = format_messages_for_tokenization(example["messages"], tokenizer)
         tokens = tokenizer(text, return_tensors=None)
         token_counts.append(len(tokens["input_ids"]))
 
