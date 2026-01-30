@@ -13,11 +13,6 @@ Phase 2 establishes baseline performance metrics using the untrained base model 
 
 ### Acceptance Criteria
 - [ ] Base model selected: Qwen3-0.6B
-- [ ] Model selection rationale documented:
-  - Parameter count (< 1B preferred)
-  - Memory footprint on T4 16GB
-  - Minimal instruction tuning (to demonstrate finetuning impact)
-  - Tokenizer compatibility with dataset
 - [ ] Model loaded successfully with appropriate dtype (float16/bfloat16)
 - [ ] Tokenizer loaded and configured with special tokens
 - [ ] Memory profiling completed (model size in VRAM)
