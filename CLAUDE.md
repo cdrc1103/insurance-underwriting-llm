@@ -95,8 +95,6 @@ A user story or feature is considered **done** when all of the following criteri
 - [ ] **Docstrings added** - Public functions include docstrings with Args, Returns, and Raises sections
 - [ ] **No regressions** - Existing tests continue to pass
 - [ ] **Code reviewed** - Use the code-reviewer subagent to review changes for quality, security vulnerabilities, and adherence to best practices
-- [ ] **README updated** - README.md updated if the implementation step leads to changes in the documented functionality
-- [ ] **Committed** - Ask user to review diff and commit AFTER EACH user story, not at the end of all stories. Commit messages should be short, start with `feature:`, `chore:`, or `test:`, and describe the code functionality (**don't write co-authored by...**)
 
 ### Verification Commands
 
