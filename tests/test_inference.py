@@ -12,12 +12,9 @@ from src.evaluation.inference import (
     EvaluationResult,
     GenerationConfig,
     GenerationResult,
-    StopStringsCriteria,
-    _trim_at_stop_strings,
     batch_generate_responses,
     evaluate_dataset,
-    extract_response_content,
-    format_prompt_for_inference,
+    evaluate_dataset_batched,
     generate_response,
     generate_response_with_metadata,
     save_evaluation_results,
@@ -149,77 +146,6 @@ class TestEvaluationResult:
         assert "total_time_ms" in result_dict
 
 
-class TestStopStringsCriteria:
-    """Tests for StopStringsCriteria stopping criterion."""
-
-    @pytest.fixture
-    def mock_tokenizer(self):
-        """Create a mock tokenizer."""
-        tokenizer = MagicMock()
-        tokenizer.decode = MagicMock(return_value="Generated text with STOP here")
-        return tokenizer
-
-    def test_stops_when_stop_string_found(self, mock_tokenizer):
-        """Test that generation stops when stop string is found."""
-        criteria = StopStringsCriteria(mock_tokenizer, ["STOP"], input_length=10)
-
-        # Create mock tensor
-        input_ids = torch.zeros(1, 20, dtype=torch.long)
-        scores = torch.zeros(1, 100)
-
-        result = criteria(input_ids, scores)
-        assert result is True
-
-    def test_continues_when_no_stop_string(self, mock_tokenizer):
-        """Test that generation continues when no stop string found."""
-        mock_tokenizer.decode = MagicMock(return_value="Generated text without stop")
-        criteria = StopStringsCriteria(mock_tokenizer, ["STOP"], input_length=10)
-
-        input_ids = torch.zeros(1, 20, dtype=torch.long)
-        scores = torch.zeros(1, 100)
-
-        result = criteria(input_ids, scores)
-        assert result is False
-
-    def test_empty_stop_strings_returns_false(self, mock_tokenizer):
-        """Test that empty stop strings list never stops."""
-        criteria = StopStringsCriteria(mock_tokenizer, [], input_length=10)
-
-        input_ids = torch.zeros(1, 20, dtype=torch.long)
-        scores = torch.zeros(1, 100)
-
-        result = criteria(input_ids, scores)
-        assert result is False
-
-
-class TestTrimAtStopStrings:
-    """Tests for _trim_at_stop_strings helper function."""
-
-    def test_trims_at_stop_string(self):
-        """Test trimming at stop string."""
-        text = "Hello world STOP this should be removed"
-        result = _trim_at_stop_strings(text, ["STOP"])
-        assert result == "Hello world "
-
-    def test_trims_at_first_stop_string(self):
-        """Test trimming at first occurring stop string."""
-        text = "Hello END world STOP here"
-        result = _trim_at_stop_strings(text, ["STOP", "END"])
-        assert result == "Hello "
-
-    def test_no_trim_when_no_stop_string(self):
-        """Test no trimming when stop string not found."""
-        text = "Hello world"
-        result = _trim_at_stop_strings(text, ["STOP"])
-        assert result == "Hello world"
-
-    def test_empty_stop_strings(self):
-        """Test no trimming with empty stop strings list."""
-        text = "Hello world STOP here"
-        result = _trim_at_stop_strings(text, [])
-        assert result == "Hello world STOP here"
-
-
 class TestGenerateResponse:
     """Tests for generate_response function."""
 
@@ -272,8 +198,9 @@ class TestGenerateResponse:
         """Test generation with stop strings."""
         model, tokenizer = mock_model_and_tokenizer
         messages = [{"role": "user", "content": "Hello"}]
+        config = GenerationConfig(stop_strings=["STOP"])
 
-        response = generate_response(model, tokenizer, messages, stop_strings=["STOP"])
+        response = generate_response(model, tokenizer, messages, config=config)
 
         assert isinstance(response, str)
         # Verify stopping criteria was passed
@@ -284,8 +211,9 @@ class TestGenerateResponse:
         """Test greedy decoding when temperature is 0."""
         model, tokenizer = mock_model_and_tokenizer
         messages = [{"role": "user", "content": "Hello"}]
+        config = GenerationConfig(temperature=0.0)
 
-        generate_response(model, tokenizer, messages, temperature=0.0)
+        generate_response(model, tokenizer, messages, config=config)
 
         call_kwargs = model.generate.call_args[1]
         assert call_kwargs["do_sample"] is False
@@ -375,7 +303,7 @@ class TestEvaluateDataset:
         """Test that all examples are evaluated."""
         model, tokenizer = mock_model_and_tokenizer
 
-        result = evaluate_dataset(model, tokenizer, mock_dataset, verbose=False)
+        result = evaluate_dataset(model, tokenizer, mock_dataset)
 
         assert isinstance(result, EvaluationResult)
         assert len(result.results) == 2
@@ -386,7 +314,7 @@ class TestEvaluateDataset:
         """Test that results include all expected metadata."""
         model, tokenizer = mock_model_and_tokenizer
 
-        result = evaluate_dataset(model, tokenizer, mock_dataset, verbose=False)
+        result = evaluate_dataset(model, tokenizer, mock_dataset)
 
         for r in result.results:
             assert "original_index" in r
@@ -403,7 +331,7 @@ class TestEvaluateDataset:
         model, tokenizer = mock_model_and_tokenizer
 
         with pytest.raises(ValueError, match="Dataset is empty"):
-            evaluate_dataset(model, tokenizer, [], verbose=False)
+            evaluate_dataset(model, tokenizer, [])
 
     def test_raises_on_missing_messages_field(self, mock_model_and_tokenizer):
         """Test that missing messages field raises ValueError."""
@@ -411,7 +339,7 @@ class TestEvaluateDataset:
         invalid_dataset = [{"task": "task1"}]
 
         with pytest.raises(ValueError, match="missing required 'messages' field"):
-            evaluate_dataset(model, tokenizer, invalid_dataset, verbose=False)
+            evaluate_dataset(model, tokenizer, invalid_dataset)
 
 
 class TestBatchGenerateResponses:
@@ -425,6 +353,9 @@ class TestBatchGenerateResponses:
         tokenizer.encode = MagicMock(return_value=[1, 2, 3, 4, 5])
         tokenizer.pad_token_id = 0
         tokenizer.decode = MagicMock(return_value="Generated response")
+        tokenizer.batch_decode = MagicMock(
+            return_value=["Generated response 1", "Generated response 2"]
+        )
 
         mock_inputs = MagicMock()
         mock_inputs.__getitem__ = lambda _self, _key: torch.zeros(2, 10, dtype=torch.long)
@@ -458,6 +389,77 @@ class TestBatchGenerateResponses:
 
         with pytest.raises(ValueError, match="Batch is empty"):
             batch_generate_responses(model, tokenizer, [])
+
+
+class TestEvaluateDatasetBatched:
+    """Tests for evaluate_dataset_batched function."""
+
+    @pytest.fixture
+    def mock_dataset(self):
+        """Create a mock dataset."""
+        return [
+            {
+                "messages": [{"role": "user", "content": "Question 1"}],
+                "task": "task1",
+                "reference_answer": "Answer 1",
+                "original_index": 0,
+            },
+            {
+                "messages": [{"role": "user", "content": "Question 2"}],
+                "task": "task2",
+                "reference_answer": "Answer 2",
+                "original_index": 1,
+            },
+        ]
+
+    @pytest.fixture
+    def mock_model_and_tokenizer(self):
+        """Create mock model and tokenizer."""
+        tokenizer = MagicMock()
+        tokenizer.apply_chat_template = MagicMock(return_value="prompt")
+        tokenizer.encode = MagicMock(return_value=[1, 2, 3, 4, 5])
+        tokenizer.pad_token_id = 0
+        tokenizer.decode = MagicMock(return_value="Generated response")
+
+        mock_inputs = {"input_ids": torch.zeros(1, 10, dtype=torch.long)}
+        tokenizer.return_value = MagicMock()
+        tokenizer.return_value.to = MagicMock(return_value=mock_inputs)
+        tokenizer.return_value.__getitem__ = lambda _self, key: mock_inputs[key]
+
+        model = MagicMock()
+        model.device = torch.device("cpu")
+        model.generate = MagicMock(return_value=torch.zeros(1, 20, dtype=torch.long))
+
+        return model, tokenizer
+
+    def test_fallback_to_sequential_on_batch_error(
+        self, mock_model_and_tokenizer, mock_dataset, caplog
+    ):
+        """Test that batch processing falls back to sequential on error with logging."""
+        import logging
+
+        model, tokenizer = mock_model_and_tokenizer
+
+        # Make batch generation fail but keep sequential generation working
+        from unittest.mock import patch
+
+        with patch("src.evaluation.inference.batch_generate_responses") as mock_batch_gen:
+            # Make batch_generate_responses raise an exception
+            mock_batch_gen.side_effect = RuntimeError("Batch processing failed")
+
+            # Enable logging capture
+            with caplog.at_level(logging.WARNING):
+                result = evaluate_dataset_batched(model, tokenizer, mock_dataset, batch_size=2)
+
+            # Verify fallback succeeded
+            assert isinstance(result, EvaluationResult)
+            assert result.successful_count == 2
+            assert result.failed_count == 0
+            assert len(result.results) == 2
+
+            # Verify warning was logged
+            assert any("Batch processing failed" in record.message for record in caplog.records)
+            assert any("Falling back to sequential" in record.message for record in caplog.records)
 
 
 class TestSaveEvaluationResults:
@@ -521,91 +523,6 @@ class TestSaveEvaluationResults:
             assert output_path.exists()
 
 
-class TestFormatPromptForInference:
-    """Tests for format_prompt_for_inference function."""
-
-    def test_formats_messages(self):
-        """Test basic message formatting."""
-        tokenizer = MagicMock()
-        tokenizer.apply_chat_template = MagicMock(return_value="<formatted>")
-
-        messages = [
-            {"role": "system", "content": "System prompt"},
-            {"role": "user", "content": "Hello"},
-        ]
-
-        result = format_prompt_for_inference(messages, tokenizer)
-
-        assert result == "<formatted>"
-        tokenizer.apply_chat_template.assert_called_once_with(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-
-    def test_raises_on_empty_messages(self):
-        """Test that empty messages raises ValueError."""
-        tokenizer = MagicMock()
-
-        with pytest.raises(ValueError, match="Messages list cannot be empty"):
-            format_prompt_for_inference([], tokenizer)
-
-    def test_raises_on_invalid_message_format(self):
-        """Test that invalid message format raises ValueError."""
-        tokenizer = MagicMock()
-
-        # Missing 'content' key
-        messages = [{"role": "user"}]
-
-        with pytest.raises(ValueError, match="must have 'role' and 'content' keys"):
-            format_prompt_for_inference(messages, tokenizer)
-
-
-class TestExtractResponseContent:
-    """Tests for extract_response_content function."""
-
-    def test_removes_thinking_tags(self):
-        """Test removal of <think> tags."""
-        response = "<think>Internal reasoning here</think>User-facing response"
-        result = extract_response_content(response)
-
-        assert "<think>" not in result
-        assert "</think>" not in result
-        assert "Internal reasoning" not in result
-        assert "User-facing response" in result
-
-    def test_handles_multiline_thinking(self):
-        """Test removal of multiline thinking content."""
-        response = """<think>
-Line 1 of thinking
-Line 2 of thinking
-</think>The actual response"""
-
-        result = extract_response_content(response)
-
-        assert "Line 1" not in result
-        assert "Line 2" not in result
-        assert "The actual response" in result
-
-    def test_preserves_content_when_no_thinking(self):
-        """Test that content is preserved when no thinking tags."""
-        response = "Just a normal response"
-        result = extract_response_content(response)
-
-        assert result == "Just a normal response"
-
-    def test_keeps_thinking_when_disabled(self):
-        """Test keeping thinking content when remove_thinking=False."""
-        response = "<think>Reasoning</think>Response"
-        result = extract_response_content(response, remove_thinking=False)
-
-        assert "<think>" in result
-        assert "Reasoning" in result
-
-    def test_handles_empty_response(self):
-        """Test handling of empty response."""
-        assert extract_response_content("") == ""
-        assert extract_response_content(None) == ""
-
-
 class TestIntegration:
     """Integration tests requiring actual model loading."""
 
@@ -632,7 +549,8 @@ class TestIntegration:
             {"role": "user", "content": "What is 2+2?"},
         ]
 
-        response = generate_response(model, tokenizer, messages, max_new_tokens=20, temperature=0.0)
+        config = GenerationConfig(max_new_tokens=20, temperature=0.0)
+        response = generate_response(model, tokenizer, messages, config=config)
 
         assert isinstance(response, str)
         assert len(response) > 0
@@ -652,7 +570,7 @@ class TestIntegration:
         ]
 
         config = GenerationConfig(max_new_tokens=10, temperature=0.0)
-        result = evaluate_dataset(model, tokenizer, dataset, config=config, verbose=False)
+        result = evaluate_dataset(model, tokenizer, dataset, config=config)
 
         assert result.successful_count == 1
         assert result.failed_count == 0

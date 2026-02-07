@@ -7,8 +7,6 @@ from src.evaluation.inference import (
     batch_generate_responses,
     evaluate_dataset,
     evaluate_dataset_batched,
-    extract_response_content,
-    format_prompt_for_inference,
     generate_response,
     generate_response_with_metadata,
     save_evaluation_results,
@@ -24,6 +22,4 @@ __all__ = [
     "batch_generate_responses",
     "evaluate_dataset_batched",
     "save_evaluation_results",
-    "format_prompt_for_inference",
-    "extract_response_content",
 ]

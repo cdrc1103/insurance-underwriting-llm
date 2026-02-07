@@ -12,7 +12,6 @@ from language models on insurance underwriting conversations. It supports:
 
 import json
 import logging
-import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -26,20 +25,6 @@ from transformers import (
     StoppingCriteria,
     StoppingCriteriaList,
 )
-
-__all__ = [
-    "GenerationConfig",
-    "GenerationResult",
-    "EvaluationResult",
-    "generate_response",
-    "generate_response_with_metadata",
-    "evaluate_dataset",
-    "batch_generate_responses",
-    "evaluate_dataset_batched",
-    "save_evaluation_results",
-    "format_prompt_for_inference",
-    "extract_response_content",
-]
 
 logger = logging.getLogger(__name__)
 
@@ -108,40 +93,50 @@ class GenerationResult:
     config: dict[str, Any]
 
 
-class StopStringsCriteria(StoppingCriteria):
-    """Stopping criteria that stops generation when any stop string is encountered."""
+class StopTokensCriteria(StoppingCriteria):
+    """
+    Stopping criteria that halts text generation when a stop *token sequence*
+    is encountered.
 
-    def __init__(self, tokenizer: PreTrainedTokenizer, stop_strings: list[str], input_length: int):
+    This implementation pre-tokenizes each stop string and compares the most
+    recently generated tokens against those token sequences. By operating at
+    the token level, it avoids repeatedly decoding text and scanning strings,
+    making it significantly more efficient than text-based approaches.
+
+    Key advantages:
+    - No repeated decoding of generated tokens
+    - Constant-time checks per generation step
+    - Exact matching that correctly handles token boundaries
+    - Scales well for long generations
+    """
+
+    def __init__(
+        self,
+        stop_strings: list[str],
+        tokenizer: PreTrainedTokenizer,
+        input_length: int,
+    ) -> None:
         """
         Initialize stop strings criteria.
 
         Args:
-            tokenizer: Tokenizer for decoding generated tokens
             stop_strings: List of strings that trigger stopping
+            tokenizer: Tokenizer for decoding generated tokens
             input_length: Length of input tokens to skip when checking
         """
-        self.tokenizer = tokenizer
-        self.stop_strings = stop_strings
+        self.stop_token_seqs = [tokenizer.encode(s, add_special_tokens=False) for s in stop_strings]
         self.input_length = input_length
 
     def __call__(
-        self,
-        input_ids: torch.LongTensor,
-        scores: torch.FloatTensor,  # noqa: ARG002
-        **kwargs,  # noqa: ARG002
+        self, input_ids: torch.LongTensor, _scores: torch.FloatTensor, **_kwargs: Any
     ) -> bool:
         """Check if any stop string is in generated text."""
-        if not self.stop_strings:
-            return False
+        generated = input_ids[0, self.input_length :]
 
-        # Decode only the generated portion
-        generated_ids = input_ids[0, self.input_length :]
-        generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-
-        for stop_string in self.stop_strings:
-            if stop_string in generated_text:
-                return True
-
+        for stop_seq in self.stop_token_seqs:
+            if len(generated) >= len(stop_seq):
+                if generated[-len(stop_seq) :].tolist() == stop_seq:
+                    return True
         return False
 
 
@@ -150,12 +145,6 @@ def generate_response(
     tokenizer: PreTrainedTokenizer,
     messages: list[dict[str, str]],
     config: GenerationConfig | None = None,
-    max_new_tokens: int = 512,
-    temperature: float = 0.7,
-    top_p: float = 0.9,
-    top_k: int = 50,
-    repetition_penalty: float = 1.1,
-    stop_strings: list[str] | None = None,
 ) -> str:
     """
     Generate response from model given conversation messages.
@@ -164,13 +153,7 @@ def generate_response(
         model: Loaded language model
         tokenizer: Model tokenizer
         messages: List of message dicts with 'role' and 'content' keys
-        config: GenerationConfig object (overrides individual parameters if provided)
-        max_new_tokens: Maximum tokens to generate
-        temperature: Sampling temperature (0.0 for greedy decoding)
-        top_p: Nucleus sampling parameter
-        top_k: Top-k sampling parameter
-        repetition_penalty: Penalty for repeating tokens
-        stop_strings: List of strings that stop generation when encountered
+        config: Generation configuration (uses defaults if not provided)
 
     Returns:
         Generated response text
@@ -178,16 +161,8 @@ def generate_response(
     Raises:
         ValueError: If generation fails
     """
-    # Use config if provided, otherwise build from individual params
-    if config is not None:
-        max_new_tokens = config.max_new_tokens
-        temperature = config.temperature
-        top_p = config.top_p
-        top_k = config.top_k
-        repetition_penalty = config.repetition_penalty
-        stop_strings = config.stop_strings
-    elif stop_strings is None:
-        stop_strings = []
+    if config is None:
+        config = GenerationConfig()
 
     try:
         # Format messages using chat template
@@ -199,20 +174,20 @@ def generate_response(
 
         # Build stopping criteria
         stopping_criteria = None
-        if stop_strings:
+        if config.stop_strings:
             stopping_criteria = StoppingCriteriaList(
-                [StopStringsCriteria(tokenizer, stop_strings, input_length)]
+                [StopTokensCriteria(config.stop_strings, tokenizer, input_length)]
             )
 
         # Generate
         outputs = model.generate(
             **inputs,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature if temperature > 0 else None,
-            top_p=top_p if temperature > 0 else None,
-            top_k=top_k if temperature > 0 else None,
-            repetition_penalty=repetition_penalty,
-            do_sample=temperature > 0,
+            max_new_tokens=config.max_new_tokens,
+            temperature=config.temperature if config.temperature > 0 else None,
+            top_p=config.top_p if config.temperature > 0 else None,
+            top_k=config.top_k if config.temperature > 0 else None,
+            repetition_penalty=config.repetition_penalty,
+            do_sample=config.temperature > 0,
             pad_token_id=tokenizer.pad_token_id,
             stopping_criteria=stopping_criteria,
         )
@@ -221,7 +196,7 @@ def generate_response(
         response = tokenizer.decode(outputs[0][input_length:], skip_special_tokens=True)
 
         # Trim response at stop strings if present
-        response = _trim_at_stop_strings(response, stop_strings)
+        response = _trim_at_stop_strings(response, config.stop_strings)
 
         return response.strip()
 
@@ -326,24 +301,77 @@ class EvaluationResult:
         }
 
 
+def _process_single_example(
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizer,
+    example: dict[str, Any],
+    index: int,
+    config: GenerationConfig,
+) -> tuple[dict[str, Any], bool]:
+    """
+    Process a single example and return result dict and success flag.
+
+    Args:
+        model: Loaded language model
+        tokenizer: Model tokenizer
+        example: Example dict with 'messages' field
+        index: Index for tracking in results
+        config: Generation configuration
+
+    Returns:
+        Tuple of (result_dict, success_flag)
+    """
+    if "messages" not in example:
+        raise ValueError(f"Example {index} missing required 'messages' field")
+
+    try:
+        gen_result = generate_response_with_metadata(
+            model, tokenizer, example["messages"], config=config
+        )
+
+        result = {
+            "original_index": example.get("original_index", index),
+            "task": example.get("task", "unknown"),
+            "messages": example["messages"],
+            "reference_answer": example.get("reference_answer", ""),
+            "generated_response": gen_result.response,
+            "generation_time_ms": gen_result.generation_time_ms,
+            "input_tokens": gen_result.input_tokens,
+            "output_tokens": gen_result.output_tokens,
+        }
+        return result, True
+
+    except Exception as e:
+        result = {
+            "original_index": example.get("original_index", index),
+            "task": example.get("task", "unknown"),
+            "messages": example["messages"],
+            "reference_answer": example.get("reference_answer", ""),
+            "generated_response": None,
+            "error": str(e),
+            "generation_time_ms": None,
+            "input_tokens": None,
+            "output_tokens": None,
+        }
+        return result, False
+
+
 def evaluate_dataset(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizer,
     dataset: Sequence[dict[str, Any]],
     config: GenerationConfig | None = None,
-    verbose: bool = True,
 ) -> EvaluationResult:
     """
     Generate responses for all examples in dataset.
 
-    Processes examples sequentially with detailed logging and metadata tracking.
+    Processes examples sequentially with detailed metadata tracking.
 
     Args:
         model: Loaded language model
         tokenizer: Model tokenizer
         dataset: Dataset with 'messages' field
         config: Generation configuration (uses defaults if not provided)
-        verbose: Whether to print progress
 
     Returns:
         EvaluationResult with all responses and metadata
@@ -357,10 +385,6 @@ def evaluate_dataset(
     if config is None:
         config = GenerationConfig()
 
-    if verbose:
-        logger.info(f"Starting evaluation on {len(dataset)} examples")
-        logger.info(f"Generation config: {config.to_dict()}")
-
     results = []
     successful_count = 0
     failed_count = 0
@@ -368,54 +392,15 @@ def evaluate_dataset(
     start_time = time.perf_counter()
 
     for i, example in enumerate(dataset):
-        if verbose and i % 10 == 0:
-            print(f"Processing example {i}/{len(dataset)}...")
-
-        if "messages" not in example:
-            raise ValueError(f"Example {i} missing required 'messages' field")
-
-        try:
-            gen_result = generate_response_with_metadata(
-                model, tokenizer, example["messages"], config=config
-            )
-
-            results.append(
-                {
-                    "original_index": example.get("original_index", i),
-                    "task": example.get("task", "unknown"),
-                    "messages": example["messages"],
-                    "reference_answer": example.get("reference_answer", ""),
-                    "generated_response": gen_result.response,
-                    "generation_time_ms": gen_result.generation_time_ms,
-                    "input_tokens": gen_result.input_tokens,
-                    "output_tokens": gen_result.output_tokens,
-                }
-            )
+        result, success = _process_single_example(model, tokenizer, example, i, config)
+        results.append(result)
+        if success:
             successful_count += 1
-
-        except Exception as e:
-            logger.warning(f"Failed to generate response for example {i}: {e}")
+        else:
             failed_count += 1
-            results.append(
-                {
-                    "original_index": example.get("original_index", i),
-                    "task": example.get("task", "unknown"),
-                    "messages": example["messages"],
-                    "reference_answer": example.get("reference_answer", ""),
-                    "generated_response": None,
-                    "error": str(e),
-                    "generation_time_ms": None,
-                    "input_tokens": None,
-                    "output_tokens": None,
-                }
-            )
 
     end_time = time.perf_counter()
     total_time_ms = (end_time - start_time) * 1000
-
-    if verbose:
-        print(f"Completed evaluation: {successful_count} successful, {failed_count} failed")
-        print(f"Total time: {total_time_ms:.2f}ms")
 
     return EvaluationResult(
         results=results,
@@ -436,8 +421,15 @@ def batch_generate_responses(
     Generate responses for a batch of conversations.
 
     Uses batched tokenization and generation for improved efficiency.
+
     Note: Due to variable-length inputs, this pads sequences which may
     affect memory usage for very heterogeneous batch sizes.
+
+    Limitation: Stop string criteria uses the padded sequence length for all
+    sequences in the batch. For batches with highly variable sequence lengths,
+    this may cause stop strings to check against padding tokens rather than
+    only generated content. Post-processing trims stop strings from the decoded
+    text to mitigate this.
 
     Args:
         model: Loaded language model
@@ -478,9 +470,11 @@ def batch_generate_responses(
     # Build stopping criteria (applies to all sequences)
     stopping_criteria = None
     if config.stop_strings:
-        # For batched generation, we use the first sequence's length as reference
+        # For batched generation, we use the padded sequence length as reference.
+        # This means the stopping criteria may check against padding tokens for
+        # shorter sequences. Post-processing trims stop strings to handle this.
         stopping_criteria = StoppingCriteriaList(
-            [StopStringsCriteria(tokenizer, config.stop_strings, inputs["input_ids"].shape[1])]
+            [StopTokensCriteria(config.stop_strings, tokenizer, inputs["input_ids"].shape[1])]
         )
 
     start_time = time.perf_counter()
@@ -502,19 +496,21 @@ def batch_generate_responses(
     total_time_ms = (end_time - start_time) * 1000
     per_example_time_ms = total_time_ms / len(messages_batch)
 
-    # Decode each response
-    results = []
-    for output_ids, input_len in zip(outputs, input_lengths, strict=True):
-        # Find actual start of generated content (skip padding and input)
-        # For padded batches, we need to skip from the padded input length
-        padded_input_len = inputs["input_ids"].shape[1]
-        response = tokenizer.decode(output_ids[padded_input_len:], skip_special_tokens=True)
+    # Batch decode all responses
+    padded_input_len = inputs["input_ids"].shape[1]
+    generated_only = [output_ids[padded_input_len:] for output_ids in outputs]
+    responses = tokenizer.batch_decode(generated_only, skip_special_tokens=True)
 
+    # Build results from decoded responses
+    results = []
+    for response, input_len, generated_ids in zip(
+        responses, input_lengths, generated_only, strict=True
+    ):
         # Trim at stop strings
         response = _trim_at_stop_strings(response, config.stop_strings)
         response = response.strip()
 
-        output_tokens = len(tokenizer.encode(response)) if response else 0
+        output_tokens = len(generated_ids)
 
         results.append(
             GenerationResult(
@@ -535,7 +531,6 @@ def evaluate_dataset_batched(
     dataset: Sequence[dict[str, Any]],
     config: GenerationConfig | None = None,
     batch_size: int = 4,
-    verbose: bool = True,
 ) -> EvaluationResult:
     """
     Generate responses for dataset using batched inference for efficiency.
@@ -546,7 +541,6 @@ def evaluate_dataset_batched(
         dataset: Dataset with 'messages' field
         config: Generation configuration
         batch_size: Number of examples to process in each batch
-        verbose: Whether to print progress
 
     Returns:
         EvaluationResult with all responses and metadata
@@ -560,12 +554,6 @@ def evaluate_dataset_batched(
     if config is None:
         config = GenerationConfig()
 
-    if verbose:
-        logger.info(
-            f"Starting batched evaluation on {len(dataset)} examples (batch_size={batch_size})"
-        )
-        logger.info(f"Generation config: {config.to_dict()}")
-
     results = []
     successful_count = 0
     failed_count = 0
@@ -576,16 +564,6 @@ def evaluate_dataset_batched(
     for batch_start in range(0, len(dataset), batch_size):
         batch_end = min(batch_start + batch_size, len(dataset))
         batch_examples = [dataset[i] for i in range(batch_start, batch_end)]
-
-        if verbose and batch_start % (batch_size * 5) == 0:
-            print(
-                f"Processing batch {batch_start // batch_size + 1}/{(len(dataset) + batch_size - 1) // batch_size}..."
-            )
-
-        # Validate batch
-        for i, example in enumerate(batch_examples):
-            if "messages" not in example:
-                raise ValueError(f"Example {batch_start + i} missing required 'messages' field")
 
         try:
             messages_batch = [ex["messages"] for ex in batch_examples]
@@ -608,50 +586,24 @@ def evaluate_dataset_batched(
                 )
                 successful_count += 1
 
-        except Exception as e:
-            logger.warning(f"Batch generation failed, falling back to sequential: {e}")
+        except Exception as batch_error:
             # Fall back to sequential for this batch
+            logger.warning(
+                f"Batch processing failed for batch starting at index {batch_start}: {batch_error}. "
+                f"Falling back to sequential processing for this batch."
+            )
             for i, example in enumerate(batch_examples):
-                try:
-                    gen_result = generate_response_with_metadata(
-                        model, tokenizer, example["messages"], config=config
-                    )
-                    results.append(
-                        {
-                            "original_index": example.get("original_index", batch_start + i),
-                            "task": example.get("task", "unknown"),
-                            "messages": example["messages"],
-                            "reference_answer": example.get("reference_answer", ""),
-                            "generated_response": gen_result.response,
-                            "generation_time_ms": gen_result.generation_time_ms,
-                            "input_tokens": gen_result.input_tokens,
-                            "output_tokens": gen_result.output_tokens,
-                        }
-                    )
+                result, success = _process_single_example(
+                    model, tokenizer, example, batch_start + i, config
+                )
+                results.append(result)
+                if success:
                     successful_count += 1
-                except Exception as inner_e:
-                    logger.warning(f"Failed to generate for example {batch_start + i}: {inner_e}")
+                else:
                     failed_count += 1
-                    results.append(
-                        {
-                            "original_index": example.get("original_index", batch_start + i),
-                            "task": example.get("task", "unknown"),
-                            "messages": example["messages"],
-                            "reference_answer": example.get("reference_answer", ""),
-                            "generated_response": None,
-                            "error": str(inner_e),
-                            "generation_time_ms": None,
-                            "input_tokens": None,
-                            "output_tokens": None,
-                        }
-                    )
 
     end_time = time.perf_counter()
     total_time_ms = (end_time - start_time) * 1000
-
-    if verbose:
-        print(f"Completed batched evaluation: {successful_count} successful, {failed_count} failed")
-        print(f"Total time: {total_time_ms:.2f}ms")
 
     return EvaluationResult(
         results=results,
@@ -693,62 +645,3 @@ def save_evaluation_results(
             json.dump(data, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to write evaluation results to {output_path}: {e}") from e
-
-    logger.info(f"Saved evaluation results to {output_path}")
-
-
-def format_prompt_for_inference(
-    messages: list[dict[str, str]],
-    tokenizer: PreTrainedTokenizer,
-) -> str:
-    """
-    Format conversation messages into a prompt string for inference.
-
-    Uses the tokenizer's chat template to format messages correctly
-    for the model, including the generation prompt.
-
-    Args:
-        messages: List of message dicts with 'role' and 'content' keys
-        tokenizer: Model tokenizer with chat template
-
-    Returns:
-        Formatted prompt string ready for tokenization
-
-    Raises:
-        ValueError: If messages format is invalid
-    """
-    if not messages:
-        raise ValueError("Messages list cannot be empty")
-
-    for msg in messages:
-        if "role" not in msg or "content" not in msg:
-            raise ValueError("Each message must have 'role' and 'content' keys")
-
-    return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-
-
-def extract_response_content(
-    response: str,
-    remove_thinking: bool = True,
-) -> str:
-    """
-    Extract the user-facing content from a generated response.
-
-    For models using thinking mode (like Qwen3), this removes the
-    internal reasoning wrapped in <think>...</think> tags.
-
-    Args:
-        response: Raw generated response
-        remove_thinking: Whether to remove <think>...</think> content
-
-    Returns:
-        Cleaned response content
-    """
-    if not response:
-        return ""
-
-    if remove_thinking:
-        # Remove <think>...</think> blocks
-        response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL)
-
-    return response.strip()
