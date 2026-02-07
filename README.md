@@ -60,12 +60,19 @@ cd insurance-underwriting-llm
 uv venv --python 3.12
 source .venv/bin/activate
 
-# Install dependencies
+# Install package in editable mode with dev dependencies
 uv pip install -e ".[dev]"
 
 # Set up pre-commit hooks
 pre-commit install
 ```
+
+**Important**: The `-e` flag installs the package in **editable mode**, which is required for:
+- Running scripts in the `scripts/` directory
+- Importing modules from `src/` and `configs/` packages
+- Development workflow where code changes take effect immediately
+
+Without editable mode installation, you'll encounter import errors when running scripts or notebooks.
 
 ## Project Structure
 

@@ -6,17 +6,15 @@ underwriting conversations, generating responses and saving results.
 """
 
 import argparse
+import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import torch
-from datasets import load_from_disk
-
-# Add project root to path
-project_root = Path(__file__).parent.parent if __name__ == "__main__" else Path.cwd()
-sys.path.insert(0, str(project_root))
 
 from configs.model import DEFAULT_MODEL_NAME
+from src.data.dataset_io import load_dataset_split
 from src.evaluation.inference import (
     GenerationConfig,
     evaluate_dataset,
@@ -25,29 +23,48 @@ from src.evaluation.inference import (
 )
 from src.models.model_loader import load_base_model
 
+logger = logging.getLogger(__name__)
 
-def load_dataset(dataset_path: Path) -> list[dict]:
+
+def setup_logging(log_dir: Path) -> Path:
     """
-    Load dataset from Hugging Face Arrow format.
+    Set up logging to both console and file.
 
     Args:
-        dataset_path: Path to dataset directory (Arrow format)
+        log_dir: Directory to save log files
 
     Returns:
-        List of dataset examples
-
-    Raises:
-        FileNotFoundError: If dataset doesn't exist
-        ValueError: If dataset format is invalid
+        Path to the created log file
     """
-    if not dataset_path.exists():
-        raise FileNotFoundError(f"Dataset not found: {dataset_path}")
+    log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load Arrow dataset
-    dataset = load_from_disk(str(dataset_path))
+    # Create timestamped log file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"inference_{timestamp}.log"
 
-    # Convert to list of dicts
-    return list(dataset)
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    # Remove existing handlers
+    root_logger.handlers.clear()
+
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter("%(message)s")
+    console_handler.setFormatter(console_formatter)
+
+    # File handler
+    file_handler = logging.FileHandler(log_file, mode="w")
+    file_handler.setLevel(logging.INFO)
+    file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    file_handler.setFormatter(file_formatter)
+
+    root_logger.addHandler(console_handler)
+    root_logger.addHandler(file_handler)
+
+    return log_file
 
 
 def run_inference(
@@ -58,6 +75,7 @@ def run_inference(
     temperature: float = 0.7,
     batch_size: int | None = None,
     device: str = "auto",
+    log_dir: Path = Path("logs"),
 ) -> None:
     """
     Run inference on dataset and save results.
@@ -70,34 +88,38 @@ def run_inference(
         temperature: Sampling temperature
         batch_size: Batch size for batched inference (None for sequential)
         device: Device to run on ('auto', 'cuda', 'cpu')
+        log_dir: Directory to save log files (default: logs/)
     """
-    print("=" * 80)
-    print("Running Inference")
-    print("=" * 80)
-    print(f"\nModel: {model_path}")
-    print(f"Dataset: {dataset_path}")
-    print(f"Output: {output_path}")
-    print(f"Device: {device}")
-    print()
+    # Set up logging
+    log_file = setup_logging(log_dir)
+    logger.info("=" * 80)
+    logger.info("Running Inference")
+    logger.info("=" * 80)
+    logger.info(f"\nModel: {model_path}")
+    logger.info(f"Dataset: {dataset_path}")
+    logger.info(f"Output: {output_path}")
+    logger.info(f"Log file: {log_file}")
+    logger.info(f"Device: {device}")
+    logger.info("")
 
     # Load dataset
-    print("Loading dataset...")
-    dataset = load_dataset(dataset_path)
-    print(f"  Loaded {len(dataset)} examples")
-    print()
+    logger.info("Loading dataset...")
+    dataset = list(load_dataset_split(dataset_path.parent, dataset_path.name))
+    logger.info(f"  Loaded {len(dataset)} examples")
+    logger.info("")
 
     # Load model
-    print("Loading model and tokenizer...")
+    logger.info("Loading model and tokenizer...")
     torch_dtype = torch.float16 if device != "cpu" else torch.float32
     model, tokenizer = load_base_model(
         model_name=model_path,
         device_map=device,
         torch_dtype=torch_dtype,
     )
-    print(f"  Model: {model.__class__.__name__}")
-    print(f"  Tokenizer: {tokenizer.__class__.__name__}")
-    print(f"  Device: {next(model.parameters()).device}")
-    print()
+    logger.info(f"  Model: {model.__class__.__name__}")
+    logger.info(f"  Tokenizer: {tokenizer.__class__.__name__}")
+    logger.info(f"  Device: {next(model.parameters()).device}")
+    logger.info("")
 
     # Configure generation
     config = GenerationConfig(
@@ -105,35 +127,35 @@ def run_inference(
         temperature=temperature,
     )
 
-    print("Generation configuration:")
-    print(f"  Max new tokens: {config.max_new_tokens}")
-    print(f"  Temperature: {config.temperature}")
-    print(f"  Top-p: {config.top_p}")
-    print(f"  Top-k: {config.top_k}")
-    print(f"  Repetition penalty: {config.repetition_penalty}")
-    print()
+    logger.info("Generation configuration:")
+    logger.info(f"  Max new tokens: {config.max_new_tokens}")
+    logger.info(f"  Temperature: {config.temperature}")
+    logger.info(f"  Top-p: {config.top_p}")
+    logger.info(f"  Top-k: {config.top_k}")
+    logger.info(f"  Repetition penalty: {config.repetition_penalty}")
+    logger.info("")
 
     # Run evaluation
     if batch_size is not None:
-        print(f"Running batched inference (batch_size={batch_size})...")
-        print()
+        logger.info(f"Running batched inference (batch_size={batch_size})...")
+        logger.info("")
         result = evaluate_dataset_batched(
             model, tokenizer, dataset, config=config, batch_size=batch_size
         )
     else:
-        print("Running sequential inference...")
-        print()
+        logger.info("Running sequential inference...")
+        logger.info("")
         result = evaluate_dataset(model, tokenizer, dataset, config=config)
 
-    print()
-    print("=" * 80)
-    print("Results")
-    print("=" * 80)
-    print(f"Successful: {result.successful_count}")
-    print(f"Failed: {result.failed_count}")
-    print(f"Total time: {result.total_time_ms:.2f}ms")
-    print(f"Average time per example: {result.total_time_ms / len(dataset):.2f}ms")
-    print()
+    logger.info("")
+    logger.info("=" * 80)
+    logger.info("Results")
+    logger.info("=" * 80)
+    logger.info(f"Successful: {result.successful_count}")
+    logger.info(f"Failed: {result.failed_count}")
+    logger.info(f"Total time: {result.total_time_ms:.2f}ms")
+    logger.info(f"Average time per example: {result.total_time_ms / len(dataset):.2f}ms")
+    logger.info("")
 
     # Calculate token statistics
     total_input_tokens = sum(
@@ -142,17 +164,17 @@ def run_inference(
     total_output_tokens = sum(
         r["output_tokens"] for r in result.results if r.get("output_tokens") is not None
     )
-    print(f"Total input tokens: {total_input_tokens:,}")
-    print(f"Total output tokens: {total_output_tokens:,}")
-    print(f"Average input tokens: {total_input_tokens / len(dataset):.1f}")
-    print(f"Average output tokens: {total_output_tokens / len(dataset):.1f}")
-    print()
+    logger.info(f"Total input tokens: {total_input_tokens:,}")
+    logger.info(f"Total output tokens: {total_output_tokens:,}")
+    logger.info(f"Average input tokens: {total_input_tokens / len(dataset):.1f}")
+    logger.info(f"Average output tokens: {total_output_tokens / len(dataset):.1f}")
+    logger.info("")
 
     # Save results
-    print(f"Saving results to {output_path}...")
+    logger.info(f"Saving results to {output_path}...")
     save_evaluation_results(result, output_path)
-    print("Done!")
-    print()
+    logger.info("Done!")
+    logger.info("")
 
 
 def main():
@@ -203,6 +225,12 @@ def main():
         choices=["auto", "cuda", "cpu"],
         help="Device to run on (default: auto)",
     )
+    parser.add_argument(
+        "--log-dir",
+        type=Path,
+        default="logs",
+        help="Directory to save log files (default: logs/)",
+    )
 
     args = parser.parse_args()
 
@@ -214,6 +242,7 @@ def main():
         temperature=args.temperature,
         batch_size=args.batch_size,
         device=args.device,
+        log_dir=args.log_dir,
     )
 
 
