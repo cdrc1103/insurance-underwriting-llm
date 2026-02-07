@@ -89,12 +89,12 @@ A user story or feature is considered **done** when all of the following criteri
 
 ### Required Checklist
 
-- [ ] **Unit tests implemented** - New functionality has corresponding unit tests with meaningful coverage of both happy paths and edge cases
+- [ ] **Unit tests implemented** - Core functionality has corresponding unit tests. Limit the tests to the code parts that are critical
 - [ ] **Code formatted** - Code has been formatted with `ruff format .`
 - [ ] **Type hints complete** - All public functions have proper type annotations
 - [ ] **Docstrings added** - Public functions include docstrings with Args, Returns, and Raises sections
 - [ ] **No regressions** - Existing tests continue to pass
-- [ ] **Code reviewed** - Use the code-reviewer subagent to review changes for quality, security vulnerabilities, and adherence to best practices
+- [ ] **Code reviewed** - Use the code-reviewer agent to review changes for quality, security vulnerabilities, and adherence to best practices. Pay special attention to the simplicity of the code
 
 ### Verification Commands
 
