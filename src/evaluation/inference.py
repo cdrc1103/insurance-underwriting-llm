@@ -19,11 +19,21 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from tqdm import tqdm
 from transformers import (
     PreTrainedModel,
     PreTrainedTokenizer,
     StoppingCriteria,
     StoppingCriteriaList,
+)
+
+from configs.model import (
+    DEFAULT_MAX_NEW_TOKENS,
+    DEFAULT_REPETITION_PENALTY,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_TOP_K,
+    DEFAULT_TOP_P,
+    MAX_TOKEN_LENGTH,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,11 +52,11 @@ class GenerationConfig:
         stop_strings: List of strings that stop generation when encountered
     """
 
-    max_new_tokens: int = 512
-    temperature: float = 0.7
-    top_p: float = 0.9
-    top_k: int = 50
-    repetition_penalty: float = 1.1
+    max_new_tokens: int = DEFAULT_MAX_NEW_TOKENS
+    temperature: float = DEFAULT_TEMPERATURE
+    top_p: float = DEFAULT_TOP_P
+    top_k: int = DEFAULT_TOP_K
+    repetition_penalty: float = DEFAULT_REPETITION_PENALTY
     stop_strings: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -149,6 +159,9 @@ def generate_response(
     """
     Generate response from model given conversation messages.
 
+    Input sequences exceeding MAX_TOKEN_LENGTH (21,486 tokens) are automatically
+    truncated to prevent out-of-memory errors.
+
     Args:
         model: Loaded language model
         tokenizer: Model tokenizer
@@ -168,8 +181,13 @@ def generate_response(
         # Format messages using chat template
         prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
-        # Tokenize
-        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        # Tokenize with truncation to prevent OOM errors
+        inputs = tokenizer(
+            prompt,
+            return_tensors="pt",
+            max_length=MAX_TOKEN_LENGTH,
+            truncation=True,
+        ).to(model.device)
         input_length = inputs["input_ids"].shape[1]
 
         # Build stopping criteria
@@ -251,9 +269,10 @@ def generate_response_with_metadata(
     if config is None:
         config = GenerationConfig()
 
-    # Format messages to get input token count
+    # Format messages to get input token count (after truncation)
     prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    input_tokens = len(tokenizer.encode(prompt))
+    tokenized = tokenizer.encode(prompt, max_length=MAX_TOKEN_LENGTH, truncation=True)
+    input_tokens = len(tokenized)
 
     # Time the generation
     start_time = time.perf_counter()
@@ -391,7 +410,7 @@ def evaluate_dataset(
 
     start_time = time.perf_counter()
 
-    for i, example in enumerate(dataset):
+    for i, example in tqdm(enumerate(dataset), total=len(dataset), desc="Processing examples"):
         result, success = _process_single_example(model, tokenizer, example, i, config)
         results.append(result)
         if success:
@@ -421,6 +440,9 @@ def batch_generate_responses(
     Generate responses for a batch of conversations.
 
     Uses batched tokenization and generation for improved efficiency.
+
+    Input sequences exceeding MAX_TOKEN_LENGTH (21,486 tokens) are automatically
+    truncated to prevent out-of-memory errors.
 
     Note: Due to variable-length inputs, this pads sequences which may
     affect memory usage for very heterogeneous batch sizes.
@@ -455,17 +477,20 @@ def batch_generate_responses(
         for messages in messages_batch
     ]
 
-    # Tokenize batch with padding
+    # Tokenize batch with padding and truncation to prevent OOM errors
     device = next(model.parameters()).device
     inputs = tokenizer(
         prompts,
         return_tensors="pt",
         padding=True,
         truncation=True,
+        max_length=MAX_TOKEN_LENGTH,
     ).to(device)
 
-    # Track input lengths for each sequence (before padding)
-    input_lengths = [len(tokenizer.encode(p)) for p in prompts]
+    # Track input lengths for each sequence (after truncation, before padding)
+    input_lengths = [
+        len(tokenizer.encode(p, max_length=MAX_TOKEN_LENGTH, truncation=True)) for p in prompts
+    ]
 
     # Build stopping criteria (applies to all sequences)
     stopping_criteria = None
