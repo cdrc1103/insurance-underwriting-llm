@@ -268,13 +268,13 @@ class TestEvaluateDataset:
             {
                 "messages": [{"role": "user", "content": "Question 1"}],
                 "task": "task1",
-                "reference_answer": "Answer 1",
+                "target_response": "Answer 1",
                 "original_index": 0,
             },
             {
                 "messages": [{"role": "user", "content": "Question 2"}],
                 "task": "task2",
-                "reference_answer": "Answer 2",
+                "target_response": "Answer 2",
                 "original_index": 1,
             },
         ]
@@ -320,7 +320,7 @@ class TestEvaluateDataset:
             assert "original_index" in r
             assert "task" in r
             assert "messages" in r
-            assert "reference_answer" in r
+            assert "target_response" in r
             assert "generated_response" in r
             assert "generation_time_ms" in r
             assert "input_tokens" in r
@@ -401,13 +401,13 @@ class TestEvaluateDatasetBatched:
             {
                 "messages": [{"role": "user", "content": "Question 1"}],
                 "task": "task1",
-                "reference_answer": "Answer 1",
+                "target_response": "Answer 1",
                 "original_index": 0,
             },
             {
                 "messages": [{"role": "user", "content": "Question 2"}],
                 "task": "task2",
-                "reference_answer": "Answer 2",
+                "target_response": "Answer 2",
                 "original_index": 1,
             },
         ]
@@ -565,7 +565,7 @@ class TestIntegration:
                     {"role": "user", "content": "Say hello."},
                 ],
                 "task": "greeting",
-                "reference_answer": "Hello!",
+                "target_response": "Hello!",
             }
         ]
 

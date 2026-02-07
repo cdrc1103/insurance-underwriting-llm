@@ -282,16 +282,18 @@ def preprocess_example(example: dict[str, Any]) -> dict[str, Any] | None:
     Preprocess a single example from the Multi-Turn-Insurance-Underwriting dataset.
 
     Produces output in Qwen3 ChatML messages format with thinking mode support.
+    Separates input messages from the target response to enable proper training and evaluation.
 
     Args:
         example: Raw dataset example containing trace, company info, and metadata
 
     Returns:
         Preprocessed example with the following fields, or None if invalid:
-            - messages: List of ChatML messages for training
-            - num_turns: Total conversation turns (excluding system message)
+            - messages: Input messages (all except final assistant response)
+            - target_response: The final assistant response the model should generate
+            - num_turns: Total conversation turns (excluding system message and final response)
             - num_user_turns: Number of user messages
-            - num_assistant_turns: Number of assistant messages
+            - num_assistant_turns: Number of assistant messages (excluding final response)
             - num_tool_turns: Number of tool response messages
             - original_index: Index from original dataset
             - task: Task type (e.g., "appetite check", "product recommendation")
@@ -311,18 +313,28 @@ def preprocess_example(example: dict[str, Any]) -> dict[str, Any] | None:
             return None
 
         # Format into Qwen3 messages format with thinking mode for training
-        messages = format_messages_for_training(company_profile, conversation)
+        full_messages = format_messages_for_training(company_profile, conversation)
 
-        # Count different message types (excluding system message)
-        user_turns = sum(1 for msg in messages if msg["role"] == "user")
-        assistant_turns = sum(1 for msg in messages if msg["role"] == "assistant")
-        tool_turns = sum(1 for msg in messages if msg["role"] == "tool")
+        # Separate input messages from target response
+        # The last assistant message is what the model should generate
+        if not full_messages or full_messages[-1]["role"] != "assistant":
+            raise ValueError("Conversation must end with an assistant message")
+
+        input_messages = full_messages[:-1]  # All messages except the last assistant response
+        target_response = full_messages[-1]["content"]  # The last assistant response to generate
+
+        # Count different message types (excluding system message and final assistant response)
+        user_turns = sum(1 for msg in input_messages if msg["role"] == "user")
+        assistant_turns = sum(1 for msg in input_messages if msg["role"] == "assistant")
+        tool_turns = sum(1 for msg in input_messages if msg["role"] == "tool")
 
         return {
-            # Primary training field - Qwen3 ChatML format with thinking mode
-            "messages": messages,
+            # Input messages for the model (all messages except the final assistant response)
+            "messages": input_messages,
+            # Target response that the model should generate
+            "target_response": target_response,
             # Metadata for analysis and filtering
-            "num_turns": len(messages) - 1,  # Exclude system message
+            "num_turns": len(input_messages) - 1,  # Exclude system message
             "num_user_turns": user_turns,
             "num_assistant_turns": assistant_turns,
             "num_tool_turns": tool_turns,
