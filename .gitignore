@@ -216,7 +216,6 @@ __marimo__/
 !/models/.gitkeep
 
 # Results and outputs
-/results/
 !/results/.gitkeep
 
 # Experiment tracking

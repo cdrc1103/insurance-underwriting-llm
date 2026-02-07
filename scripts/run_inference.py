@@ -6,16 +6,17 @@ underwriting conversations, generating responses and saving results.
 """
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 import torch
+from datasets import load_from_disk
 
 # Add project root to path
 project_root = Path(__file__).parent.parent if __name__ == "__main__" else Path.cwd()
 sys.path.insert(0, str(project_root))
 
+from configs.model import DEFAULT_MODEL_NAME
 from src.evaluation.inference import (
     GenerationConfig,
     evaluate_dataset,
@@ -27,28 +28,26 @@ from src.models.model_loader import load_base_model
 
 def load_dataset(dataset_path: Path) -> list[dict]:
     """
-    Load dataset from JSON file.
+    Load dataset from Hugging Face Arrow format.
 
     Args:
-        dataset_path: Path to dataset JSON file
+        dataset_path: Path to dataset directory (Arrow format)
 
     Returns:
         List of dataset examples
 
     Raises:
-        FileNotFoundError: If dataset file doesn't exist
+        FileNotFoundError: If dataset doesn't exist
         ValueError: If dataset format is invalid
     """
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
-    with open(dataset_path) as f:
-        dataset = json.load(f)
+    # Load Arrow dataset
+    dataset = load_from_disk(str(dataset_path))
 
-    if not isinstance(dataset, list):
-        raise ValueError("Dataset must be a list of examples")
-
-    return dataset
+    # Convert to list of dicts
+    return list(dataset)
 
 
 def run_inference(
@@ -65,7 +64,7 @@ def run_inference(
 
     Args:
         model_path: Path or name of model to load
-        dataset_path: Path to dataset JSON file
+        dataset_path: Path to dataset directory (Arrow format)
         output_path: Path to save results
         max_new_tokens: Maximum tokens to generate
         temperature: Sampling temperature
@@ -162,14 +161,16 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
+        default=DEFAULT_MODEL_NAME,
         required=True,
         help="Model name or path (e.g., 'Qwen/Qwen3-0.6B' or path to fine-tuned model)",
     )
     parser.add_argument(
         "--dataset",
         type=Path,
+        default="data/splits/test",
         required=True,
-        help="Path to dataset JSON file",
+        help="Path to dataset directory (Hugging Face Arrow format)",
     )
     parser.add_argument(
         "--output",

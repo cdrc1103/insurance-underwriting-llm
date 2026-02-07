@@ -1,0 +1,101 @@
+{
+  "model_name": "Qwen/Qwen3-0.6B",
+  "tokenizer_vocab_size": 151643,
+  "recommendation_percentile": 95.0,
+  "recommended_max_length": 21486,
+  "token_statistics": {
+    "train": {
+      "total_examples": 222,
+      "mean": 5425.148648648648,
+      "median": 2441.5,
+      "min": 472,
+      "max": 64258,
+      "std": 7728.366549468821,
+      "percentiles": {
+        "25th": 1698.25,
+        "50th": 2441.5,
+        "75th": 4786.75,
+        "90th": 19108.3,
+        "95th": 21486.049999999992,
+        "99th": 27636.059999999998
+      }
+    },
+    "validation": {
+      "total_examples": 37,
+      "mean": 4086.5675675675675,
+      "median": 2119.0,
+      "min": 804,
+      "max": 20415,
+      "std": 4728.03513009163,
+      "percentiles": {
+        "25th": 1718.0,
+        "50th": 2119.0,
+        "75th": 4020.0,
+        "90th": 8333.0,
+        "95th": 16624.599999999984,
+        "99th": 20227.8
+      }
+    },
+    "test": {
+      "total_examples": 37,
+      "mean": 5430.459459459459,
+      "median": 2564.0,
+      "min": 1205,
+      "max": 29997,
+      "std": 6757.791161577249,
+      "percentiles": {
+        "25th": 1600.0,
+        "50th": 2564.0,
+        "75th": 7049.0,
+        "90th": 10707.4,
+        "95th": 22294.599999999977,
+        "99th": 28695.24
+      }
+    }
+  },
+  "truncation_analysis": {
+    "train": {
+      "max_length": 21486,
+      "total_examples": 222,
+      "truncated_count": 12,
+      "truncated_percentage": 5.405405405405405,
+      "truncated_indices": [
+        22,
+        30,
+        61,
+        69,
+        111,
+        139,
+        148,
+        169,
+        170,
+        171,
+        176,
+        214
+      ],
+      "max_tokens_over": 42772,
+      "avg_tokens_over": 7664.75
+    },
+    "validation": {
+      "max_length": 21486,
+      "total_examples": 37,
+      "truncated_count": 0,
+      "truncated_percentage": 0.0,
+      "truncated_indices": [],
+      "max_tokens_over": 0,
+      "avg_tokens_over": 0
+    },
+    "test": {
+      "max_length": 21486,
+      "total_examples": 37,
+      "truncated_count": 2,
+      "truncated_percentage": 5.405405405405405,
+      "truncated_indices": [
+        18,
+        36
+      ],
+      "max_tokens_over": 8511,
+      "avg_tokens_over": 6703.0
+    }
+  }
+}
