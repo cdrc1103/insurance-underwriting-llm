@@ -8,7 +8,9 @@
       "Bash(source .venv/bin/activate)",
       "Bash(pytest:*)",
       "Bash(ruff check:*)",
-      "Bash(ruff format:*)"
+      "Bash(ruff format:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)"
     ]
   }
 }

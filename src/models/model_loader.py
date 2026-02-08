@@ -1,5 +1,7 @@
 """Model loading utilities for base and fine-tuned models."""
 
+from typing import Any
+
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 
@@ -8,6 +10,7 @@ def load_base_model(
     model_name: str = "Qwen/Qwen3-0.6B",
     device_map: str = "auto",
     dtype: torch.dtype = torch.bfloat16,
+    **model_kwargs: Any,
 ) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     """
     Load base Qwen3 model for inference.
@@ -16,6 +19,8 @@ def load_base_model(
         model_name: HuggingFace model identifier
         device_map: Device placement strategy ("auto", "cuda", "cpu")
         dtype: Data type for model weights (torch.float16, torch.bfloat16, or torch.float32)
+        **model_kwargs: Additional kwargs passed to AutoModelForCausalLM.from_pretrained()
+            (e.g. quantization_config for QLoRA)
 
     Returns:
         Tuple of (model, tokenizer)
@@ -34,6 +39,7 @@ def load_base_model(
             model_name,
             device_map=device_map,
             dtype=dtype,
+            **model_kwargs,
         )
 
         # Configure special tokens
