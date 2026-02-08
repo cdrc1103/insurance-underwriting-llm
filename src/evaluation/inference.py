@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import psutil
 import torch
 from tqdm import tqdm
 from transformers import (
@@ -343,9 +344,28 @@ def _process_single_example(
     if "messages" not in example:
         raise ValueError(f"Example {index} missing required 'messages' field")
 
+    # Get process for memory tracking
+    process = psutil.Process()
+
     try:
+        # Capture memory before generation
+        mem_before_mb = process.memory_info().rss / 1024 / 1024
+
         gen_result = generate_response_with_metadata(
             model, tokenizer, example["messages"], config=config
+        )
+
+        # Capture memory after generation
+        mem_after_mb = process.memory_info().rss / 1024 / 1024
+        mem_delta_mb = mem_after_mb - mem_before_mb
+
+        # Log metrics for this example
+        logger.info(
+            f"Example {index} | "
+            f"Task: {example.get('task', 'unknown')} | "
+            f"Time: {gen_result.generation_time_ms:.2f}ms | "
+            f"Memory: {mem_after_mb:.2f}MB (Δ{mem_delta_mb:+.2f}MB) | "
+            f"Tokens: {gen_result.input_tokens} in / {gen_result.output_tokens} out"
         )
 
         result = {
@@ -355,12 +375,16 @@ def _process_single_example(
             "target_response": example.get("target_response", ""),
             "generated_response": gen_result.response,
             "generation_time_ms": gen_result.generation_time_ms,
+            "memory_used_mb": round(mem_after_mb, 2),
+            "memory_delta_mb": round(mem_delta_mb, 2),
             "input_tokens": gen_result.input_tokens,
             "output_tokens": gen_result.output_tokens,
         }
         return result, True
 
     except Exception as e:
+        logger.error(f"Example {index} | Task: {example.get('task', 'unknown')} | Error: {str(e)}")
+
         result = {
             "original_index": example.get("original_index", index),
             "task": example.get("task", "unknown"),
@@ -369,6 +393,8 @@ def _process_single_example(
             "generated_response": None,
             "error": str(e),
             "generation_time_ms": None,
+            "memory_used_mb": None,
+            "memory_delta_mb": None,
             "input_tokens": None,
             "output_tokens": None,
         }
@@ -477,6 +503,10 @@ def batch_generate_responses(
         for messages in messages_batch
     ]
 
+    # Set left padding for decoder-only models (required for correct batched generation)
+    original_padding_side = tokenizer.padding_side
+    tokenizer.padding_side = "left"
+
     # Tokenize batch with padding and truncation to prevent OOM errors
     device = next(model.parameters()).device
     inputs = tokenizer(
@@ -520,6 +550,9 @@ def batch_generate_responses(
     end_time = time.perf_counter()
     total_time_ms = (end_time - start_time) * 1000
     per_example_time_ms = total_time_ms / len(messages_batch)
+
+    # Restore original padding side
+    tokenizer.padding_side = original_padding_side
 
     # Batch decode all responses
     padded_input_len = inputs["input_ids"].shape[1]
@@ -585,26 +618,49 @@ def evaluate_dataset_batched(
 
     start_time = time.perf_counter()
 
+    # Get process for memory tracking
+    process = psutil.Process()
+
     # Process in batches
     for batch_start in range(0, len(dataset), batch_size):
         batch_end = min(batch_start + batch_size, len(dataset))
         batch_examples = [dataset[i] for i in range(batch_start, batch_end)]
 
         try:
+            # Capture memory before batch
+            mem_before_mb = process.memory_info().rss / 1024 / 1024
+
             messages_batch = [ex["messages"] for ex in batch_examples]
             gen_results = batch_generate_responses(model, tokenizer, messages_batch, config=config)
+
+            # Capture memory after batch
+            mem_after_mb = process.memory_info().rss / 1024 / 1024
+            mem_delta_mb = mem_after_mb - mem_before_mb
 
             for i, (example, gen_result) in enumerate(
                 zip(batch_examples, gen_results, strict=True)
             ):
+                example_idx = batch_start + i
+
+                # Log metrics for this example
+                logger.info(
+                    f"Example {example_idx} | "
+                    f"Task: {example.get('task', 'unknown')} | "
+                    f"Time: {gen_result.generation_time_ms:.2f}ms | "
+                    f"Memory: {mem_after_mb:.2f}MB (batch Δ{mem_delta_mb:+.2f}MB) | "
+                    f"Tokens: {gen_result.input_tokens} in / {gen_result.output_tokens} out"
+                )
+
                 results.append(
                     {
-                        "original_index": example.get("original_index", batch_start + i),
+                        "original_index": example.get("original_index", example_idx),
                         "task": example.get("task", "unknown"),
                         "messages": example["messages"],
                         "target_response": example.get("target_response", ""),
                         "generated_response": gen_result.response,
                         "generation_time_ms": gen_result.generation_time_ms,
+                        "memory_used_mb": round(mem_after_mb, 2),
+                        "memory_delta_mb": round(mem_delta_mb / len(batch_examples), 2),
                         "input_tokens": gen_result.input_tokens,
                         "output_tokens": gen_result.output_tokens,
                     }
