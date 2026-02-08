@@ -7,9 +7,15 @@ underwriting conversations, generating responses and saving results.
 
 import argparse
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
+
+# Set PyTorch memory allocator configuration BEFORE importing torch
+# This reduces GPU memory fragmentation by allowing PyTorch to expand memory segments
+# Note: This is a module-level side effect but is intentional and required for optimal memory usage
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import torch
 

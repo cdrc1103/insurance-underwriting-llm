@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import psutil
 import torch
 from tqdm import tqdm
 from transformers import (
@@ -34,8 +33,10 @@ from configs.model import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_K,
     DEFAULT_TOP_P,
+    DEFAULT_USE_CACHE,
     MAX_TOKEN_LENGTH,
 )
+from src.utils.memory import cleanup_cuda_memory
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class GenerationConfig:
         top_k: Top-k sampling parameter
         repetition_penalty: Penalty for repeating tokens
         stop_strings: List of strings that stop generation when encountered
+        use_cache: Whether to use KV cache during generation (False reduces memory)
     """
 
     max_new_tokens: int = DEFAULT_MAX_NEW_TOKENS
@@ -59,6 +61,7 @@ class GenerationConfig:
     top_k: int = DEFAULT_TOP_K
     repetition_penalty: float = DEFAULT_REPETITION_PENALTY
     stop_strings: list[str] = field(default_factory=list)
+    use_cache: bool = DEFAULT_USE_CACHE
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
@@ -82,6 +85,7 @@ class GenerationConfig:
             "top_k": self.top_k,
             "repetition_penalty": self.repetition_penalty,
             "stop_strings": self.stop_strings,
+            "use_cache": self.use_cache,
         }
 
 
@@ -198,21 +202,28 @@ def generate_response(
                 [StopTokensCriteria(config.stop_strings, tokenizer, input_length)]
             )
 
-        # Generate
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=config.max_new_tokens,
-            temperature=config.temperature if config.temperature > 0 else None,
-            top_p=config.top_p if config.temperature > 0 else None,
-            top_k=config.top_k if config.temperature > 0 else None,
-            repetition_penalty=config.repetition_penalty,
-            do_sample=config.temperature > 0,
-            pad_token_id=tokenizer.pad_token_id,
-            stopping_criteria=stopping_criteria,
-        )
+        # Generate with inference mode to disable autograd
+        try:
+            with torch.inference_mode():
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=config.max_new_tokens,
+                    temperature=config.temperature if config.temperature > 0 else None,
+                    top_p=config.top_p if config.temperature > 0 else None,
+                    top_k=config.top_k if config.temperature > 0 else None,
+                    repetition_penalty=config.repetition_penalty,
+                    do_sample=config.temperature > 0,
+                    pad_token_id=tokenizer.pad_token_id,
+                    stopping_criteria=stopping_criteria,
+                    use_cache=config.use_cache,
+                )
 
-        # Decode response (skip the input prompt)
-        response = tokenizer.decode(outputs[0][input_length:], skip_special_tokens=True)
+                # Decode response (skip the input prompt)
+                response = tokenizer.decode(outputs[0][input_length:], skip_special_tokens=True)
+        finally:
+            # Clean up tensors even if an exception occurs
+            del inputs
+            del outputs
 
         # Trim response at stop strings if present
         response = _trim_at_stop_strings(response, config.stop_strings)
@@ -344,27 +355,16 @@ def _process_single_example(
     if "messages" not in example:
         raise ValueError(f"Example {index} missing required 'messages' field")
 
-    # Get process for memory tracking
-    process = psutil.Process()
-
     try:
-        # Capture memory before generation
-        mem_before_mb = process.memory_info().rss / 1024 / 1024
-
         gen_result = generate_response_with_metadata(
             model, tokenizer, example["messages"], config=config
         )
-
-        # Capture memory after generation
-        mem_after_mb = process.memory_info().rss / 1024 / 1024
-        mem_delta_mb = mem_after_mb - mem_before_mb
 
         # Log metrics for this example
         logger.info(
             f"Example {index} | "
             f"Task: {example.get('task', 'unknown')} | "
             f"Time: {gen_result.generation_time_ms:.2f}ms | "
-            f"Memory: {mem_after_mb:.2f}MB (Δ{mem_delta_mb:+.2f}MB) | "
             f"Tokens: {gen_result.input_tokens} in / {gen_result.output_tokens} out"
         )
 
@@ -375,15 +375,20 @@ def _process_single_example(
             "target_response": example.get("target_response", ""),
             "generated_response": gen_result.response,
             "generation_time_ms": gen_result.generation_time_ms,
-            "memory_used_mb": round(mem_after_mb, 2),
-            "memory_delta_mb": round(mem_delta_mb, 2),
             "input_tokens": gen_result.input_tokens,
             "output_tokens": gen_result.output_tokens,
         }
+
+        # Clean up after single example
+        cleanup_cuda_memory()
+
         return result, True
 
     except Exception as e:
         logger.error(f"Example {index} | Task: {example.get('task', 'unknown')} | Error: {str(e)}")
+
+        # Cleanup even on error
+        cleanup_cuda_memory()
 
         result = {
             "original_index": example.get("original_index", index),
@@ -393,8 +398,6 @@ def _process_single_example(
             "generated_response": None,
             "error": str(e),
             "generation_time_ms": None,
-            "memory_used_mb": None,
-            "memory_delta_mb": None,
             "input_tokens": None,
             "output_tokens": None,
         }
@@ -534,51 +537,60 @@ def batch_generate_responses(
 
     start_time = time.perf_counter()
 
-    # Generate batch
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=config.max_new_tokens,
-        temperature=config.temperature if config.temperature > 0 else None,
-        top_p=config.top_p if config.temperature > 0 else None,
-        top_k=config.top_k if config.temperature > 0 else None,
-        repetition_penalty=config.repetition_penalty,
-        do_sample=config.temperature > 0,
-        pad_token_id=tokenizer.pad_token_id,
-        stopping_criteria=stopping_criteria,
-    )
-
-    end_time = time.perf_counter()
-    total_time_ms = (end_time - start_time) * 1000
-    per_example_time_ms = total_time_ms / len(messages_batch)
-
-    # Restore original padding side
-    tokenizer.padding_side = original_padding_side
-
-    # Batch decode all responses
-    padded_input_len = inputs["input_ids"].shape[1]
-    generated_only = [output_ids[padded_input_len:] for output_ids in outputs]
-    responses = tokenizer.batch_decode(generated_only, skip_special_tokens=True)
-
-    # Build results from decoded responses
-    results = []
-    for response, input_len, generated_ids in zip(
-        responses, input_lengths, generated_only, strict=True
-    ):
-        # Trim at stop strings
-        response = _trim_at_stop_strings(response, config.stop_strings)
-        response = response.strip()
-
-        output_tokens = len(generated_ids)
-
-        results.append(
-            GenerationResult(
-                response=response,
-                generation_time_ms=round(per_example_time_ms, 2),
-                input_tokens=input_len,
-                output_tokens=output_tokens,
-                config=config.to_dict(),
+    # Generate batch with inference mode
+    try:
+        with torch.inference_mode():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=config.max_new_tokens,
+                temperature=config.temperature if config.temperature > 0 else None,
+                top_p=config.top_p if config.temperature > 0 else None,
+                top_k=config.top_k if config.temperature > 0 else None,
+                repetition_penalty=config.repetition_penalty,
+                do_sample=config.temperature > 0,
+                pad_token_id=tokenizer.pad_token_id,
+                stopping_criteria=stopping_criteria,
+                use_cache=config.use_cache,
             )
-        )
+
+            # Batch decode all responses
+            padded_input_len = inputs["input_ids"].shape[1]
+            generated_only = [output_ids[padded_input_len:] for output_ids in outputs]
+            responses = tokenizer.batch_decode(generated_only, skip_special_tokens=True)
+
+        end_time = time.perf_counter()
+        total_time_ms = (end_time - start_time) * 1000
+        per_example_time_ms = total_time_ms / len(messages_batch)
+
+        # Restore original padding side
+        tokenizer.padding_side = original_padding_side
+
+        # Build results from decoded responses
+        results = []
+        for response, input_len, generated_ids in zip(
+            responses, input_lengths, generated_only, strict=True
+        ):
+            # Trim at stop strings
+            response = _trim_at_stop_strings(response, config.stop_strings)
+            response = response.strip()
+
+            output_tokens = len(generated_ids)
+
+            results.append(
+                GenerationResult(
+                    response=response,
+                    generation_time_ms=round(per_example_time_ms, 2),
+                    input_tokens=input_len,
+                    output_tokens=output_tokens,
+                    config=config.to_dict(),
+                )
+            )
+    finally:
+        # Clean up tensors explicitly, even if an exception occurs
+        del inputs
+        del outputs
+        del generated_only
+        cleanup_cuda_memory()
 
     return results
 
@@ -618,24 +630,17 @@ def evaluate_dataset_batched(
 
     start_time = time.perf_counter()
 
-    # Get process for memory tracking
-    process = psutil.Process()
-
     # Process in batches
-    for batch_start in range(0, len(dataset), batch_size):
+    num_batches = (len(dataset) + batch_size - 1) // batch_size
+    for batch_start in tqdm(
+        range(0, len(dataset), batch_size), total=num_batches, desc="Processing batches"
+    ):
         batch_end = min(batch_start + batch_size, len(dataset))
         batch_examples = [dataset[i] for i in range(batch_start, batch_end)]
 
         try:
-            # Capture memory before batch
-            mem_before_mb = process.memory_info().rss / 1024 / 1024
-
             messages_batch = [ex["messages"] for ex in batch_examples]
             gen_results = batch_generate_responses(model, tokenizer, messages_batch, config=config)
-
-            # Capture memory after batch
-            mem_after_mb = process.memory_info().rss / 1024 / 1024
-            mem_delta_mb = mem_after_mb - mem_before_mb
 
             for i, (example, gen_result) in enumerate(
                 zip(batch_examples, gen_results, strict=True)
@@ -647,7 +652,6 @@ def evaluate_dataset_batched(
                     f"Example {example_idx} | "
                     f"Task: {example.get('task', 'unknown')} | "
                     f"Time: {gen_result.generation_time_ms:.2f}ms | "
-                    f"Memory: {mem_after_mb:.2f}MB (batch Δ{mem_delta_mb:+.2f}MB) | "
                     f"Tokens: {gen_result.input_tokens} in / {gen_result.output_tokens} out"
                 )
 
@@ -659,13 +663,14 @@ def evaluate_dataset_batched(
                         "target_response": example.get("target_response", ""),
                         "generated_response": gen_result.response,
                         "generation_time_ms": gen_result.generation_time_ms,
-                        "memory_used_mb": round(mem_after_mb, 2),
-                        "memory_delta_mb": round(mem_delta_mb / len(batch_examples), 2),
                         "input_tokens": gen_result.input_tokens,
                         "output_tokens": gen_result.output_tokens,
                     }
                 )
                 successful_count += 1
+
+            # Clean up after each batch
+            cleanup_cuda_memory()
 
         except Exception as batch_error:
             # Fall back to sequential for this batch
@@ -673,6 +678,10 @@ def evaluate_dataset_batched(
                 f"Batch processing failed for batch starting at index {batch_start}: {batch_error}. "
                 f"Falling back to sequential processing for this batch."
             )
+
+            # Cleanup before fallback
+            cleanup_cuda_memory()
+
             for i, example in enumerate(batch_examples):
                 result, success = _process_single_example(
                     model, tokenizer, example, batch_start + i, config

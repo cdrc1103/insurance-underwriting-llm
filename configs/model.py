@@ -16,3 +16,4 @@ DEFAULT_TEMPERATURE: float = 0.7
 DEFAULT_TOP_P: float = 0.9
 DEFAULT_TOP_K: int = 50
 DEFAULT_REPETITION_PENALTY: float = 1.1
+DEFAULT_USE_CACHE: bool = False  # Disable KV cache by default to prevent OOM on GPUs

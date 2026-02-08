@@ -323,8 +323,6 @@ class TestEvaluateDataset:
             assert "target_response" in r
             assert "generated_response" in r
             assert "generation_time_ms" in r
-            assert "memory_used_mb" in r
-            assert "memory_delta_mb" in r
             assert "input_tokens" in r
             assert "output_tokens" in r
 
