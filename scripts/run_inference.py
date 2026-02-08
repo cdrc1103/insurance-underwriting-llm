@@ -114,7 +114,7 @@ def run_inference(
     model, tokenizer = load_base_model(
         model_name=model_path,
         device_map=device,
-        torch_dtype=torch_dtype,
+        dtype=torch_dtype,
     )
     logger.info(f"  Model: {model.__class__.__name__}")
     logger.info(f"  Tokenizer: {tokenizer.__class__.__name__}")

@@ -17,7 +17,7 @@ def loaded_model():
     model, tokenizer = load_base_model(
         model_name="Qwen/Qwen3-0.6B",
         device_map="cpu",  # Use CPU for testing to avoid GPU requirement
-        torch_dtype=torch.float32,  # Use float32 for CPU
+        dtype=torch.float32,  # Use float32 for CPU
     )
     return model, tokenizer
 
@@ -56,7 +56,7 @@ def test_load_base_model_dtype():
     model, _ = load_base_model(
         model_name="Qwen/Qwen3-0.6B",
         device_map="cpu",
-        torch_dtype=torch.float32,
+        dtype=torch.float32,
     )
 
     # Check that parameters have the correct dtype

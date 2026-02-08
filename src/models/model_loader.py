@@ -7,7 +7,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, P
 def load_base_model(
     model_name: str = "Qwen/Qwen3-0.6B",
     device_map: str = "auto",
-    torch_dtype: torch.dtype = torch.bfloat16,
+    dtype: torch.dtype = torch.bfloat16,
 ) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     """
     Load base Qwen3 model for inference.
@@ -15,7 +15,7 @@ def load_base_model(
     Args:
         model_name: HuggingFace model identifier
         device_map: Device placement strategy ("auto", "cuda", "cpu")
-        torch_dtype: Data type for model weights (torch.float16, torch.bfloat16, or torch.float32)
+        dtype: Data type for model weights (torch.float16, torch.bfloat16, or torch.float32)
 
     Returns:
         Tuple of (model, tokenizer)
@@ -33,7 +33,7 @@ def load_base_model(
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             device_map=device_map,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
 
         # Configure special tokens

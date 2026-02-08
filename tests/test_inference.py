@@ -535,7 +535,7 @@ class TestIntegration:
             model, tokenizer = load_base_model(
                 model_name="Qwen/Qwen3-0.6B",
                 device_map="cpu",
-                torch_dtype=torch.float32,
+                dtype=torch.float32,
             )
             return model, tokenizer
         except Exception:
