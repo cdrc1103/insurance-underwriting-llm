@@ -223,6 +223,7 @@ def create_trainer(
         eval_dataset=eval_dataset,
         tokenizer=tokenizer,
         callbacks=all_callbacks,
+        compute_metrics=compute_metrics,
     )
 
     logger.info(f"Trainer created: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
