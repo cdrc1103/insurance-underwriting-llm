@@ -225,3 +225,6 @@ mlruns/
 # IDE settings
 .vscode/
 .idea/
+
+# Claude Code local settings
+.claude/
