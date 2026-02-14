@@ -10,10 +10,6 @@ import json
 import sys
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
 from src.data.dataset_io import load_insurance_dataset
 from src.data.preprocessing import get_preprocessing_stats, preprocess_dataset
 
@@ -24,13 +20,13 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=project_root / "data" / "processed",
+        default=Path("data/processed"),
         help="Directory to save preprocessed data",
     )
     parser.add_argument(
         "--cache-dir",
         type=Path,
-        default=project_root / "data",
+        default=Path("data"),
         help="Directory for dataset cache",
     )
     args = parser.parse_args()

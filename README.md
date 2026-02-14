@@ -60,12 +60,19 @@ cd insurance-underwriting-llm
 uv venv --python 3.12
 source .venv/bin/activate
 
-# Install dependencies
+# Install package in editable mode with dev dependencies
 uv pip install -e ".[dev]"
 
 # Set up pre-commit hooks
 pre-commit install
 ```
+
+**Important**: The `-e` flag installs the package in **editable mode**, which is required for:
+- Running scripts in the `scripts/` directory
+- Importing modules from `src/` and `configs/` packages
+- Development workflow where code changes take effect immediately
+
+Without editable mode installation, you'll encounter import errors when running scripts or notebooks.
 
 ## Project Structure
 
@@ -184,6 +191,67 @@ lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
 - Cosine annealing scheduler with warmup
 - FP16 mixed precision training
 - LoRA adapters via PEFT library
+
+## Inference Pipeline
+
+The inference module provides a reusable pipeline for generating model responses on insurance underwriting conversations.
+
+### Basic Usage
+
+```python
+from src.models import load_base_model
+from src.evaluation import (
+    GenerationConfig,
+    generate_response,
+    evaluate_dataset,
+)
+
+# Load model
+model, tokenizer = load_base_model()
+
+# Generate single response
+messages = [
+    {"role": "system", "content": "You are an insurance underwriting co-pilot."},
+    {"role": "user", "content": "What insurance do I need?"},
+]
+response = generate_response(model, tokenizer, messages)
+
+# Configure generation parameters
+config = GenerationConfig(
+    max_new_tokens=512,
+    temperature=0.7,
+    top_p=0.9,
+    top_k=50,
+    repetition_penalty=1.1,
+    stop_strings=["</s>"],  # Optional stop strings
+)
+
+# Evaluate entire dataset
+result = evaluate_dataset(model, tokenizer, test_dataset, config=config)
+print(f"Successful: {result.successful_count}, Failed: {result.failed_count}")
+```
+
+### Batched Inference
+
+For improved efficiency on GPU, use batched inference:
+
+```python
+from src.evaluation import evaluate_dataset_batched
+
+result = evaluate_dataset_batched(
+    model, tokenizer, dataset,
+    config=config,
+    batch_size=4,
+)
+```
+
+### Features
+
+- **Configurable generation**: Temperature, top_p, top_k, repetition penalty
+- **Stopping criteria**: Custom stop strings for controlled generation
+- **Batched inference**: Process multiple examples efficiently
+- **Metadata logging**: Track generation time, token counts for reproducibility
+- **Response extraction**: Remove thinking tags from Qwen3 outputs
 
 ## Technology Stack
 

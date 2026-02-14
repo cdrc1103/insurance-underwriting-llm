@@ -7,14 +7,9 @@ for custom PyTorch training based on GPU memory constraints.
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).parent.parent if __name__ == "__main__" else Path.cwd()
-sys.path.insert(0, str(project_root))
-
-from configs.model import RECOMMENDED_FINE_TUNING_MAX_LENGTH
+from configs.model import MAX_TOKEN_LENGTH
 from src.data.splitting import load_splits
 from src.data.tokenization import load_tokenizer
 
@@ -214,7 +209,7 @@ def calculate_pytorch_hyperparameters(
 def calculate_hyperparameters(
     splits_dir: Path,
     model_name: str = "Qwen/Qwen3-0.6B",
-    max_seq_length: int = RECOMMENDED_FINE_TUNING_MAX_LENGTH,
+    max_seq_length: int = MAX_TOKEN_LENGTH,
     output_file: Path | None = None,
 ) -> dict:
     """Hyperparameter calculation for PyTorch training."""
@@ -288,7 +283,7 @@ def main():
     parser.add_argument(
         "--max-seq-length",
         type=int,
-        default=RECOMMENDED_FINE_TUNING_MAX_LENGTH,
+        default=MAX_TOKEN_LENGTH,
         help="Maximum sequence length for training",
     )
     parser.add_argument(

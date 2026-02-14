@@ -9,10 +9,6 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
 from src.data.dataset_io import load_dataset_split
 from src.data.splitting import create_stratified_split, print_split_summary, save_splits
 
@@ -23,13 +19,13 @@ def main():
     parser.add_argument(
         "--input-dir",
         type=Path,
-        default=project_root / "data" / "processed",
+        default=Path("data/processed"),
         help="Directory containing preprocessed data",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=project_root / "data" / "splits",
+        default=Path("data/splits"),
         help="Directory to save splits",
     )
     parser.add_argument(

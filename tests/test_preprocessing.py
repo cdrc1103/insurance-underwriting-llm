@@ -319,17 +319,42 @@ def test_format_messages_with_thinking_mode(sample_with_internal_reasoning):
     assert "E&O coverage is recommended" in user_facing_part
 
 
+def test_preprocess_example_with_thinking_mode(sample_with_internal_reasoning):
+    """Test preprocessing example with internal reasoning separates input from target."""
+    result = preprocess_example(sample_with_internal_reasoning)
+
+    assert result is not None
+    assert "messages" in result
+    assert "target_response" in result
+
+    # Input messages should be system + user only
+    assert len(result["messages"]) == 2
+    assert result["messages"][0]["role"] == "system"
+    assert result["messages"][1]["role"] == "user"
+
+    # Target response should contain both <think> tags and user-facing content
+    assert "<think>" in result["target_response"]
+    assert "</think>" in result["target_response"]
+    assert "analyze the company profile" in result["target_response"]
+    assert "E&O coverage is recommended" in result["target_response"]
+
+
 def test_preprocess_example(sample_example):
     """Test preprocessing single example produces messages format."""
     result = preprocess_example(sample_example)
 
     assert result is not None
     assert "messages" in result
-    assert len(result["messages"]) == 3  # system + 2 turns
+    assert "target_response" in result
+    # messages: system + user (final assistant response is in target_response)
+    assert len(result["messages"]) == 2
     assert result["messages"][0]["role"] == "system"
-    assert result["num_turns"] == 2
+    assert result["messages"][1]["role"] == "user"
+    # The final assistant response should be in target_response
+    assert "liability" in result["target_response"].lower()
+    assert result["num_turns"] == 1  # Excludes system message and final assistant response
     assert result["num_user_turns"] == 1
-    assert result["num_assistant_turns"] == 1
+    assert result["num_assistant_turns"] == 0  # Excludes final assistant response
     assert result["task"] == "Product Recommendations"
     assert result["reference_answer"] == "Recommended products: GL, Property"
     assert result["correct"] is True
@@ -341,11 +366,17 @@ def test_preprocess_example_with_tool_calls(sample_with_tool_calls):
 
     assert result is not None
     assert "messages" in result
+    assert "target_response" in result
     assert result["num_tool_turns"] == 1
 
-    # Verify tool message is present
+    # Verify tool message is present in input messages
     tool_messages = [m for m in result["messages"] if m["role"] == "tool"]
     assert len(tool_messages) == 1
+
+    # Verify final assistant response is in target_response, not in messages
+    assistant_messages = [m for m in result["messages"] if m["role"] == "assistant"]
+    assert len(assistant_messages) == 0  # Final assistant response moved to target_response
+    assert "appetite" in result["target_response"].lower()
 
 
 def test_preprocess_example_empty_trace():
@@ -374,8 +405,24 @@ def test_preprocess_dataset():
         "reference answer": ["In appetite", "Limit: $1M"],
         "correct": [True, True],
         "trace": [
-            [{"role": "user", "content": "Question 1", "type": "underwriter", "tool_calls": ""}],
-            [{"role": "user", "content": "Question 2", "type": "underwriter", "tool_calls": ""}],
+            [
+                {"role": "user", "content": "Question 1", "type": "underwriter", "tool_calls": ""},
+                {
+                    "role": "assistant",
+                    "content": "Answer 1",
+                    "type": "user-facing assistant",
+                    "tool_calls": "",
+                },
+            ],
+            [
+                {"role": "user", "content": "Question 2", "type": "underwriter", "tool_calls": ""},
+                {
+                    "role": "assistant",
+                    "content": "Answer 2",
+                    "type": "user-facing assistant",
+                    "tool_calls": "",
+                },
+            ],
         ],
     }
 
@@ -384,6 +431,7 @@ def test_preprocess_dataset():
 
     assert len(preprocessed) == 2
     assert "messages" in preprocessed[0]
+    assert "target_response" in preprocessed[0]
     assert "task" in preprocessed[0]
 
 
@@ -416,6 +464,12 @@ def test_preprocess_dataset_with_tool_calls():
                     "type": "tool",
                     "tool_calls": "",
                 },
+                {
+                    "role": "assistant",
+                    "content": "Final answer",
+                    "type": "user-facing assistant",
+                    "tool_calls": "",
+                },
             ]
         ],
     }
@@ -425,6 +479,7 @@ def test_preprocess_dataset_with_tool_calls():
 
     assert len(preprocessed) == 1
     assert "messages" in preprocessed[0]
+    assert "target_response" in preprocessed[0]
 
 
 def test_get_preprocessing_stats():
