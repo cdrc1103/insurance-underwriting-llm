@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -26,13 +27,16 @@ from src.evaluation.judge_evaluator import (
     batch_evaluate,
     results_to_dict,
 )
-from src.evaluation.model_provider import create_provider
+from src.evaluation.judge_model_provider import create_provider
+from src.logging import setup_logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+# Configure logging to both console and file
+log_file = setup_logging(
+    log_dir=Path("logs"),
+    log_prefix="geval_evaluation",
 )
 logger = logging.getLogger(__name__)
+logger.info(f"Logging to {log_file}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,13 +61,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        default="claude-3-5-sonnet-20241022",
-        help="Model identifier (e.g., claude-3-5-sonnet-20241022, gpt-4o)",
+        default="claude-sonnet-4-5-20250929",
+        help="Model identifier (e.g., claude-x, gpt-x)",
     )
     parser.add_argument(
         "--num-samples",
         type=int,
-        default=20,
+        default=5,
         help="Number of samples per criterion for probability estimation",
     )
     parser.add_argument(
@@ -112,7 +116,7 @@ def main() -> None:
     provider = create_provider(
         model=args.model,
         temperature=args.temperature,
-        max_tokens=512,
+        max_tokens=1024,
     )
 
     config = GEvalConfig(
@@ -135,11 +139,15 @@ def main() -> None:
     # Serialize and save
     output_dict = results_to_dict(geval_results, args.model, config)
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w") as f:
+    # Add date identifier to output filename
+    date_str = datetime.now().strftime("%Y%m%d")
+    output_path = args.output.parent / f"{args.output.stem}_{date_str}{args.output.suffix}"
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
         json.dump(output_dict, f, indent=2)
 
-    logger.info("Results saved to %s", args.output)
+    logger.info("Results saved to %s", output_path)
 
     # Print summary
     metrics = output_dict["aggregate_metrics"]

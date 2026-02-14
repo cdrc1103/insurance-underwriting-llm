@@ -184,7 +184,7 @@ class LiteLLMProvider:
 
 
 def create_provider(
-    model: str = "claude-3-5-sonnet-20241022",
+    model: str,
     temperature: float = 0.0,
     max_tokens: int = 100,
     max_retries: int = 3,
@@ -199,6 +199,9 @@ def create_provider(
 
     Returns:
         Configured LiteLLMProvider instance
+
+    Raises:
+        ValueError: If model identifier is empty
 
     Example:
         >>> provider = create_provider("claude-3-5-sonnet-20241022")

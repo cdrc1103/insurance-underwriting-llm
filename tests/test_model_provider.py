@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.evaluation.model_provider import (
+from src.evaluation.judge_model_provider import (
     LiteLLMProvider,
     ModelResponse,
     create_provider,

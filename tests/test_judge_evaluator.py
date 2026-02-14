@@ -18,7 +18,7 @@ from src.evaluation.judge_evaluator import (
     results_to_dict,
     score_criterion,
 )
-from src.evaluation.model_provider import ModelResponse
+from src.evaluation.judge_model_provider import ModelResponse
 
 # --- Fixtures ---
 
