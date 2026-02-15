@@ -1,7 +1,7 @@
 """Run G-Eval evaluation on baseline model results.
 
 Usage:
-    # Default: Anthropic Claude with 20 samples
+    # Default: Anthropic Claude with x samples
     python scripts/run_geval_evaluation.py
 
     # Custom model and samples
@@ -136,7 +136,7 @@ def main() -> None:
     logger.info("Model: %s", args.model)
     logger.info("Samples per criterion: %d", config.num_samples)
     logger.info("Temperature: %.1f", config.temperature)
-    logger.info("Max Tokens, %d", config.max_tokens)
+    logger.info("Max Tokens: %d", config.max_tokens)
 
     # Estimate cost
     estimated_calls = len(results) * 6 * config.num_samples
