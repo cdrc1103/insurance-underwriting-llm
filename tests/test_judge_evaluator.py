@@ -197,7 +197,7 @@ class TestGEvalConfig:
         config = GEvalConfig()
         assert config.num_samples == 20
         assert config.temperature == 2.0
-        assert config.max_tokens == 512
+        assert config.max_tokens == 1024
         assert config.sample_delay == 0.5
 
     def test_invalid_num_samples_raises(self):
