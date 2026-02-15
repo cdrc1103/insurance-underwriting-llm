@@ -1,15 +1,16 @@
-"""Lightweight model provider abstraction using LiteLLM.
+"""Lightweight async model provider abstraction using LiteLLM.
 
 Provides a unified interface for calling any LLM provider (Anthropic, OpenAI,
 OpenRouter, Cohere, etc.) through LiteLLM. Includes retry logic, cost tracking,
-and token usage reporting.
+token usage reporting, and concurrency control.
 
 Example:
-    provider = create_provider("claude-3-5-sonnet-20241022")
-    response = provider.generate("What is 2+2?")
+    provider = create_provider("claude-3-5-sonnet-20241022", max_concurrent_requests=10)
+    response = await provider.generate("What is 2+2?")
     print(response.content, response.cost_usd)
 """
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
@@ -23,6 +24,9 @@ from litellm.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Default timeout for API calls (60 seconds)
+DEFAULT_TIMEOUT = 60.0
 
 
 @dataclass
@@ -47,17 +51,21 @@ class ModelResponse:
 
 
 class LiteLLMProvider:
-    """LiteLLM-based model provider supporting 100+ LLM providers.
+    """Async LiteLLM-based model provider.
 
-    Uses LiteLLM's unified completion() interface to support any model
+    Uses LiteLLM's unified acompletion() interface to support any model
     provider. API keys are read from environment variables automatically
     (e.g., ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY).
+
+    Includes concurrency control via semaphore to prevent overwhelming APIs.
 
     Attributes:
         model: Model identifier (e.g., "claude-3-5-sonnet-20241022", "openrouter/arcee-ai/trinity-large-preview:free")
         temperature: Default sampling temperature
         max_tokens: Default maximum tokens to generate
         max_retries: Maximum number of retry attempts on failure
+        max_concurrent_requests: Maximum number of concurrent API requests
+        timeout: Timeout in seconds for each API call
     """
 
     def __init__(
@@ -66,6 +74,8 @@ class LiteLLMProvider:
         temperature: float = 0.0,
         max_tokens: int = 100,
         max_retries: int = 3,
+        max_concurrent_requests: int = 10,
+        timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         """Initialize provider.
 
@@ -74,24 +84,32 @@ class LiteLLMProvider:
             temperature: Default sampling temperature
             max_tokens: Default maximum tokens to generate
             max_retries: Maximum number of retry attempts on transient failures
+            max_concurrent_requests: Maximum concurrent API requests (default: 10)
+            timeout: Timeout in seconds for each API call (default: 60.0)
 
         Raises:
-            ValueError: If model identifier is empty
+            ValueError: If model identifier is empty or max_concurrent_requests < 1
         """
         if not model:
             raise ValueError("Model identifier must not be empty")
+        if max_concurrent_requests < 1:
+            raise ValueError("max_concurrent_requests must be at least 1")
 
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.max_retries = max_retries
+        self.timeout = timeout
+        self._semaphore = asyncio.Semaphore(max_concurrent_requests)
 
-    def generate(self, prompt: str, **kwargs: Any) -> ModelResponse:
-        """Generate a response from the model.
+    async def generate(self, prompt: str, **kwargs: Any) -> ModelResponse:
+        """Generate a response from the model asynchronously.
+
+        Uses semaphore for concurrency control and timeout protection.
 
         Args:
             prompt: Input prompt text
-            **kwargs: Override defaults (temperature, max_tokens)
+            **kwargs: Override defaults (temperature, max_tokens, timeout)
 
         Returns:
             ModelResponse with content, token usage, cost, and latency
@@ -99,43 +117,58 @@ class LiteLLMProvider:
         Raises:
             APIError: If the API call fails after all retries
             APIConnectionError: If unable to connect to the API
+            asyncio.TimeoutError: If the API call exceeds the timeout
         """
         temperature = kwargs.get("temperature", self.temperature)
         max_tokens = kwargs.get("max_tokens", self.max_tokens)
+        timeout = kwargs.get("timeout", self.timeout)
 
-        last_error: Exception | None = None
+        async with self._semaphore:
+            last_error: Exception | None = None
 
-        for attempt in range(1, self.max_retries + 1):
-            try:
-                return self._call_api(prompt, temperature, max_tokens)
-            except RateLimitError as e:
-                last_error = e
-                wait_time = 2**attempt
-                logger.warning(
-                    "Rate limit hit (attempt %d/%d), waiting %ds",
-                    attempt,
-                    self.max_retries,
-                    wait_time,
-                )
-                time.sleep(wait_time)
-            except (APIError, APIConnectionError) as e:
-                last_error = e
-                wait_time = 2**attempt
-                logger.warning(
-                    "API error (attempt %d/%d): %s, retrying in %ds",
-                    attempt,
-                    self.max_retries,
-                    e,
-                    wait_time,
-                )
-                time.sleep(wait_time)
+            for attempt in range(1, self.max_retries + 1):
+                try:
+                    return await asyncio.wait_for(
+                        self._acall_api(prompt, temperature, max_tokens), timeout=timeout
+                    )
+                except TimeoutError as e:
+                    last_error = TimeoutError(f"API call timed out after {timeout}s")
+                    logger.warning(
+                        "Timeout (attempt %d/%d) after %ds",
+                        attempt,
+                        self.max_retries,
+                        timeout,
+                    )
+                    if attempt == self.max_retries:
+                        raise last_error from e
+                except RateLimitError as e:
+                    last_error = e
+                    wait_time = 2**attempt
+                    logger.warning(
+                        "Rate limit hit (attempt %d/%d), waiting %ds",
+                        attempt,
+                        self.max_retries,
+                        wait_time,
+                    )
+                    await asyncio.sleep(wait_time)
+                except (APIError, APIConnectionError) as e:
+                    last_error = e
+                    wait_time = 2**attempt
+                    logger.warning(
+                        "API error (attempt %d/%d): %s, retrying in %ds",
+                        attempt,
+                        self.max_retries,
+                        e,
+                        wait_time,
+                    )
+                    await asyncio.sleep(wait_time)
 
-        if last_error is None:
-            raise RuntimeError("API call failed but no error was captured")
-        raise last_error
+            if last_error is None:
+                raise RuntimeError("API call failed but no error was captured")
+            raise last_error
 
-    def _call_api(self, prompt: str, temperature: float, max_tokens: int) -> ModelResponse:
-        """Make a single API call via LiteLLM.
+    async def _acall_api(self, prompt: str, temperature: float, max_tokens: int) -> ModelResponse:
+        """Make a single async API call via LiteLLM.
 
         Args:
             prompt: Input prompt text
@@ -147,7 +180,7 @@ class LiteLLMProvider:
         """
         start_time = time.time()
 
-        response = litellm.completion(
+        response = await litellm.acompletion(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
@@ -194,6 +227,8 @@ def create_provider(
     temperature: float = 1.0,
     max_tokens: int = 100,
     max_retries: int = 3,
+    max_concurrent_requests: int = 10,
+    timeout: float = DEFAULT_TIMEOUT,
 ) -> LiteLLMProvider:
     """Factory function to create a model provider.
 
@@ -202,6 +237,8 @@ def create_provider(
         temperature: Default sampling temperature
         max_tokens: Default maximum tokens to generate
         max_retries: Maximum retry attempts on transient failures
+        max_concurrent_requests: Maximum concurrent API requests (default: 10)
+        timeout: Timeout in seconds for each API call (default: 60.0)
 
     Returns:
         Configured LiteLLMProvider instance
@@ -210,8 +247,8 @@ def create_provider(
         ValueError: If model identifier is empty
 
     Example:
-        >>> provider = create_provider("claude-3-5-sonnet-20241022")
-        >>> response = provider.generate("What is 2+2?")
+        >>> provider = create_provider("claude-3-5-sonnet-20241022", max_concurrent_requests=5)
+        >>> response = await provider.generate("What is 2+2?")
         >>> print(response.content)
 
     Note:
@@ -225,4 +262,6 @@ def create_provider(
         temperature=temperature,
         max_tokens=max_tokens,
         max_retries=max_retries,
+        max_concurrent_requests=max_concurrent_requests,
+        timeout=timeout,
     )

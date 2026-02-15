@@ -2,23 +2,21 @@
 
 import pytest
 
-from src.evaluation.judge_evaluator import (
-    CRITERIA,
-    CriterionScore,
-    EvaluationCriterion,
-    GEvalConfig,
-    GEvalResult,
+from src.evaluation.criterion import CRITERIA, EvaluationCriterion
+from src.evaluation.evaluator import (
     compute_aggregate_metrics,
+    evaluate_example,
+    results_to_dict,
+)
+from src.evaluation.geval_scorer import create_geval_prompt, score_criterion
+from src.evaluation.judge_model_provider import ModelResponse
+from src.evaluation.models import CriterionScore, GEvalConfig, GEvalResult
+from src.evaluation.utils import (
     compute_score_probabilities,
     compute_weighted_score,
-    create_geval_prompt,
-    evaluate_example,
     parse_company_profile,
     parse_score_from_response,
-    results_to_dict,
-    score_criterion,
 )
-from src.evaluation.judge_model_provider import ModelResponse
 
 # --- Fixtures ---
 
@@ -53,7 +51,8 @@ class MockProvider:
         self.response_text = response_text
         self.call_count = 0
 
-    def generate(self, _prompt: str, **_kwargs) -> ModelResponse:
+    async def generate(self, _prompt: str, **_kwargs) -> ModelResponse:
+        """Async generate method for testing."""
         self.call_count += 1
         return ModelResponse(
             content=self.response_text,
@@ -299,12 +298,13 @@ class TestCreateGEvalPrompt:
 class TestScoreCriterion:
     """Tests for score_criterion with mock provider."""
 
-    def test_returns_criterion_score(self):
+    @pytest.mark.anyio
+    async def test_returns_criterion_score(self):
         """Test that scoring returns a valid CriterionScore."""
         provider = MockProvider("Good. SCORE: 4")
         config = GEvalConfig(num_samples=3, sample_delay=0.0)
 
-        result = score_criterion(
+        result = await score_criterion(
             provider=provider,
             criterion=SAMPLE_CRITERION,
             company_profile={"Name": "Acme"},
@@ -321,12 +321,13 @@ class TestScoreCriterion:
         assert result.weighted_score == 4.0
         assert result.total_cost_usd == pytest.approx(0.003)
 
-    def test_handles_parse_failures(self):
+    @pytest.mark.anyio
+    async def test_handles_parse_failures(self):
         """Test graceful handling when score parsing fails."""
         provider = MockProvider("No score in this response")
         config = GEvalConfig(num_samples=3, sample_delay=0.0)
 
-        result = score_criterion(
+        result = await score_criterion(
             provider=provider,
             criterion=SAMPLE_CRITERION,
             company_profile={"Name": "Acme"},
@@ -339,12 +340,13 @@ class TestScoreCriterion:
         assert result.raw_scores == []
         assert result.weighted_score == 0.0
 
-    def test_tracks_api_calls(self):
+    @pytest.mark.anyio
+    async def test_tracks_api_calls(self):
         """Test that provider is called num_samples times."""
         provider = MockProvider("SCORE: 3")
         config = GEvalConfig(num_samples=5, sample_delay=0.0)
 
-        score_criterion(
+        await score_criterion(
             provider=provider,
             criterion=SAMPLE_CRITERION,
             company_profile={},
@@ -486,3 +488,131 @@ class TestResultsToDict:
         assert output["evaluation_metadata"]["temperature"] == 1.5
         assert "results" in output
         assert "aggregate_metrics" in output
+
+
+# --- Test: CriterionScore Serialization ---
+
+
+class TestCriterionScoreSerialization:
+    """Tests for CriterionScore.to_dict() and from_dict()."""
+
+    def test_to_dict(self):
+        """Test CriterionScore.to_dict() converts to JSON-serializable dict."""
+        score = CriterionScore(
+            criterion_name="Test",
+            criterion_key="test",
+            raw_scores=[4, 5, 4],
+            score_probabilities={4: 0.67, 5: 0.33},
+            weighted_score=4.33,
+            justification="Test justification",
+            total_cost_usd=0.01,
+        )
+
+        result = score.to_dict()
+
+        assert result["criterion_name"] == "Test"
+        assert result["raw_scores"] == [4, 5, 4]
+        assert result["score_probabilities"] == {"4": 0.67, "5": 0.33}
+        assert result["weighted_score"] == 4.33
+
+    def test_from_dict(self):
+        """Test CriterionScore.from_dict() reconstructs from dict."""
+        data = {
+            "criterion_name": "Test",
+            "criterion_key": "test",
+            "raw_scores": [3, 4, 3],
+            "score_probabilities": {"3": 0.67, "4": 0.33},
+            "weighted_score": 3.33,
+            "justification": "Test",
+            "total_cost_usd": 0.02,
+        }
+
+        score = CriterionScore.from_dict(data)
+
+        assert score.criterion_name == "Test"
+        assert score.raw_scores == [3, 4, 3]
+        assert score.score_probabilities == {3: 0.67, 4: 0.33}
+        assert score.weighted_score == 3.33
+
+    def test_roundtrip(self):
+        """Test that to_dict() and from_dict() roundtrip correctly."""
+        original = CriterionScore(
+            criterion_name="Roundtrip",
+            criterion_key="roundtrip",
+            raw_scores=[5, 5, 4],
+            score_probabilities={4: 0.33, 5: 0.67},
+            weighted_score=4.67,
+            justification="Roundtrip test",
+            total_cost_usd=0.03,
+        )
+
+        reconstructed = CriterionScore.from_dict(original.to_dict())
+
+        assert reconstructed.criterion_name == original.criterion_name
+        assert reconstructed.raw_scores == original.raw_scores
+        assert reconstructed.score_probabilities == original.score_probabilities
+        assert reconstructed.weighted_score == original.weighted_score
+
+
+# --- Test: GEvalResult Serialization ---
+
+
+class TestGEvalResultSerialization:
+    """Tests for GEvalResult.to_dict() and from_dict()."""
+
+    def test_to_dict(self):
+        """Test GEvalResult.to_dict() includes all fields."""
+        criterion_score = CriterionScore(
+            criterion_name="Test",
+            criterion_key="test",
+            raw_scores=[4],
+            score_probabilities={4: 1.0},
+            weighted_score=4.0,
+            justification="Test",
+            total_cost_usd=0.01,
+        )
+        result = GEvalResult(
+            example_id=1,
+            task_type="test_task",
+            criterion_scores=[criterion_score],
+            overall_score=4.0,
+            total_cost_usd=0.01,
+            total_api_calls=5,
+            evaluation_time_ms=100.0,
+        )
+
+        data = result.to_dict()
+
+        assert data["example_id"] == 1
+        assert data["task_type"] == "test_task"
+        assert len(data["criterion_scores"]) == 1
+        assert data["overall_score"] == 4.0
+
+    def test_from_dict(self):
+        """Test GEvalResult.from_dict() reconstructs correctly."""
+        data = {
+            "example_id": 2,
+            "task_type": "test",
+            "overall_score": 3.5,
+            "total_cost_usd": 0.02,
+            "total_api_calls": 10,
+            "evaluation_time_ms": 200.0,
+            "criterion_scores": [
+                {
+                    "criterion_name": "Test",
+                    "criterion_key": "test",
+                    "raw_scores": [3, 4],
+                    "score_probabilities": {"3": 0.5, "4": 0.5},
+                    "weighted_score": 3.5,
+                    "justification": "Test",
+                    "total_cost_usd": 0.02,
+                }
+            ],
+        }
+
+        result = GEvalResult.from_dict(data)
+
+        assert result.example_id == 2
+        assert result.task_type == "test"
+        assert len(result.criterion_scores) == 1
+        assert result.criterion_scores[0].criterion_name == "Test"

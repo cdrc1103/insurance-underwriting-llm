@@ -11,24 +11,29 @@ Usage:
     python scripts/run_geval_evaluation.py \
         --input results/baseline_evaluation.json \
         --output results/geval_results.json
+
+    # Resume from previous run
+    python scripts/run_geval_evaluation.py --resume
 """
 
 import argparse
-import json
 import logging
-import sys
 from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from configs.model import DEFAULT_MAX_NEW_TOKENS
-from src.evaluation.judge_evaluator import (
-    GEvalConfig,
-    batch_evaluate,
-    results_to_dict,
-)
+from src.evaluation.criterion import CRITERIA
+from src.evaluation.evaluator import compute_aggregate_metrics
 from src.evaluation.judge_model_provider import create_provider
+from src.evaluation.models import GEvalConfig
+from src.evaluation.utils import (
+    load_existing_results,
+    load_input_data,
+    log_summary,
+    prepare_evaluation_batch,
+    run_evaluation_loop,
+)
 from src.logging import setup_logging
 
 # Configure logging to both console and file
@@ -95,35 +100,43 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Limit number of examples to evaluate (for testing)",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from existing results file if it exists",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
-    """Run the G-Eval evaluation pipeline."""
+    """Run the G-Eval evaluation pipeline with incremental saving and resume support."""
     load_dotenv()
     args = parse_args()
 
     # Load input data
-    if not args.input.exists():
-        logger.error("Input file not found: %s", args.input)
-        sys.exit(1)
+    examples = load_input_data(args.input)
 
-    with open(args.input) as f:
-        data = json.load(f)
+    # Determine output path with date
+    date_str = datetime.now().strftime("%Y%m%d")
+    output_path = args.output.parent / f"{args.output.stem}_{date_str}{args.output.suffix}"
 
-    results = data["results"] if "results" in data else data
-    logger.info("Loaded %d examples from %s", len(results), args.input)
+    # Load existing results if resuming
+    existing_results, evaluated_ids = (
+        load_existing_results(output_path) if args.resume else ([], set())
+    )
 
-    # Limit examples if requested
-    if args.max_examples is not None:
-        results = results[: args.max_examples]
-        logger.info("Limited to %d examples", len(results))
+    # Prepare batch to evaluate
+    examples_to_evaluate = prepare_evaluation_batch(examples, evaluated_ids, args.max_examples)
+
+    if not examples_to_evaluate:
+        logger.info("No examples to evaluate. All work is complete!")
+        return
 
     # Create provider and config
     provider = create_provider(
         model=args.model,
         temperature=args.temperature,
-        max_tokens=DEFAULT_MAX_NEW_TOKENS,
+        max_tokens=args.max_tokens,
     )
 
     config = GEvalConfig(
@@ -133,51 +146,26 @@ def main() -> None:
         max_tokens=args.max_tokens,
     )
 
+    # Log configuration
     logger.info("Model: %s", args.model)
     logger.info("Samples per criterion: %d", config.num_samples)
     logger.info("Temperature: %.1f", config.temperature)
     logger.info("Max Tokens: %d", config.max_tokens)
 
     # Estimate cost
-    estimated_calls = len(results) * 6 * config.num_samples
-    logger.info("Estimated API calls: %d", estimated_calls)
+    estimated_calls = len(examples_to_evaluate) * len(CRITERIA) * config.num_samples
+    logger.info("Estimated API calls for remaining examples: %d", estimated_calls)
 
-    # Run evaluation
-    geval_results = batch_evaluate(results, provider, config)
-
-    # Serialize and save
-    output_dict = results_to_dict(geval_results, args.model, config)
-
-    # Add date identifier to output filename
-    date_str = datetime.now().strftime("%Y%m%d")
-    output_path = args.output.parent / f"{args.output.stem}_{date_str}{args.output.suffix}"
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        json.dump(output_dict, f, indent=2)
+    # Run evaluation with incremental saving
+    all_results = run_evaluation_loop(
+        examples_to_evaluate, provider, config, output_path, args.model, existing_results, CRITERIA
+    )
 
     logger.info("Results saved to %s", output_path)
 
     # Log summary
-    metrics = output_dict["aggregate_metrics"]
-
-    summary_lines = [
-        "=== G-Eval Results Summary ===",
-        f"Model: {args.model}",
-        f"Examples: {metrics['total_examples']} ({metrics['valid_examples']} valid)",
-        f"Overall Mean Score: {metrics['overall_mean']:.2f} / 5.0",
-        f"Total API Calls: {metrics['total_api_calls']}",
-        f"Total Cost: ${metrics['total_cost_usd']:.4f}",
-        "\nBy Task Type:",
-    ]
-    for task, task_data in metrics.get("by_task", {}).items():
-        summary_lines.append(f"  {task}: {task_data['mean']:.2f} (n={task_data['count']})")
-
-    summary_lines.append("\nBy Criterion:")
-    for criterion, crit_data in metrics.get("by_criterion", {}).items():
-        summary_lines.append(f"  {criterion}: {crit_data['mean']:.2f} (n={crit_data['count']})")
-
-    logger.info("\n" + "\n".join(summary_lines))
+    metrics = compute_aggregate_metrics(all_results)
+    log_summary(metrics, args.model)
 
 
 if __name__ == "__main__":
