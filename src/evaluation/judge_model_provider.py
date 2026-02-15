@@ -1,8 +1,8 @@
 """Lightweight model provider abstraction using LiteLLM.
 
 Provides a unified interface for calling any LLM provider (Anthropic, OpenAI,
-Cohere, etc.) through LiteLLM. Includes retry logic, cost tracking, and
-token usage reporting.
+OpenRouter, Cohere, etc.) through LiteLLM. Includes retry logic, cost tracking,
+and token usage reporting.
 
 Example:
     provider = create_provider("claude-3-5-sonnet-20241022")
@@ -51,10 +51,10 @@ class LiteLLMProvider:
 
     Uses LiteLLM's unified completion() interface to support any model
     provider. API keys are read from environment variables automatically
-    (e.g., ANTHROPIC_API_KEY, OPENAI_API_KEY).
+    (e.g., ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY).
 
     Attributes:
-        model: Model identifier (e.g., "claude-3-5-sonnet-20241022", "gpt-4o")
+        model: Model identifier (e.g., "claude-3-5-sonnet-20241022", "openrouter/arcee-ai/trinity-large-preview:free")
         temperature: Default sampling temperature
         max_tokens: Default maximum tokens to generate
         max_retries: Maximum number of retry attempts on failure
@@ -70,7 +70,7 @@ class LiteLLMProvider:
         """Initialize provider.
 
         Args:
-            model: Model identifier (e.g., "claude-3-5-sonnet-20241022", "gpt-4o")
+            model: Model identifier (e.g., "claude-3-5-sonnet-20241022", "openrouter/arcee-ai/trinity-large-preview:free")
             temperature: Default sampling temperature
             max_tokens: Default maximum tokens to generate
             max_retries: Maximum number of retry attempts on transient failures
@@ -157,7 +157,13 @@ class LiteLLMProvider:
         latency_ms = (time.time() - start_time) * 1000
 
         usage = response.usage  # pyright: ignore[reportAttributeAccessIssue]
-        cost = litellm.completion_cost(completion_response=response)
+
+        # Try to get cost, default to 0.0 if model not in pricing database
+        try:
+            cost = litellm.completion_cost(completion_response=response)
+        except Exception as e:
+            logger.debug("Could not calculate cost for model %s: %s", self.model, e)
+            cost = 0.0
 
         content = response.choices[0].message.content  # pyright: ignore[reportAttributeAccessIssue]
         if content is None:
@@ -212,6 +218,7 @@ def create_provider(
         API keys are read from environment variables:
         - ANTHROPIC_API_KEY for Claude models
         - OPENAI_API_KEY for OpenAI models
+        - OPENROUTER_API_KEY for OpenRouter models
     """
     return LiteLLMProvider(
         model=model,

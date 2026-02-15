@@ -92,7 +92,7 @@ Phase 2 establishes baseline performance metrics using the untrained base model 
 - [ ] Sample outputs manually reviewed to validate judge accuracy
 
 ### Technical Considerations
-- Use Claude API (Anthropic SDK) for evaluation
+- Use LiteLLM for provider-agnostic evaluation (supports Anthropic, OpenAI, OpenRouter, etc.)
 - Design clear, objective rubric to minimize judge bias
 - Include reference answer in judge prompt for comparison
 - Batch API calls for cost efficiency

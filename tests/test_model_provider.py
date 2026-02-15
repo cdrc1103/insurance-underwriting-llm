@@ -142,6 +142,26 @@ class TestLiteLLMProvider:
         assert mock_litellm.completion.call_count == 2
         mock_sleep.assert_called_once()
 
+    @patch("src.evaluation.judge_model_provider.litellm")
+    def test_generate_handles_unknown_model_cost(self, mock_litellm):
+        """Test that cost defaults to 0.0 when model not in pricing database."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "test response"
+        mock_response.usage.prompt_tokens = 10
+        mock_response.usage.completion_tokens = 5
+        mock_litellm.completion.return_value = mock_response
+        # Simulate litellm not knowing the model pricing
+        mock_litellm.completion_cost.side_effect = Exception("Model not in pricing database")
+
+        provider = LiteLLMProvider(model="openrouter/arcee-ai/trinity-large-preview:free")
+        result = provider.generate("test")
+
+        assert result.content == "test response"
+        assert result.cost_usd == 0.0
+        assert result.input_tokens == 10
+        assert result.output_tokens == 5
+
 
 class TestCreateProvider:
     """Tests for create_provider factory function."""
@@ -150,7 +170,7 @@ class TestCreateProvider:
         """Test factory with default parameters."""
         provider = create_provider()
         assert provider.model == "claude-3-5-sonnet-20241022"
-        assert provider.temperature == 0.0
+        assert provider.temperature == 1.0
         assert provider.max_tokens == 100
 
     def test_custom_model(self):

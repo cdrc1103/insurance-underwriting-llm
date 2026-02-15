@@ -5,7 +5,7 @@ insurance underwriting assistant responses. Uses chain-of-thought evaluation ste
 and probability-based scoring via multiple sampling for fine-grained, continuous scores.
 
 The evaluator is provider-agnostic through the model_provider abstraction layer,
-supporting any LLM provider (Anthropic, OpenAI, etc.) via LiteLLM.
+supporting any LLM provider (Anthropic, OpenAI, OpenRouter, etc.) via LiteLLM.
 
 Example:
     from src.evaluation.judge_model_provider import create_provider
