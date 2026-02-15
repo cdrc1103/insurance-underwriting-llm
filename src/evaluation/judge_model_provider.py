@@ -156,14 +156,14 @@ class LiteLLMProvider:
 
         latency_ms = (time.time() - start_time) * 1000
 
-        usage = response.usage
+        usage = response.usage  # pyright: ignore[reportAttributeAccessIssue]
         cost = litellm.completion_cost(completion_response=response)
 
-        content = response.choices[0].message.content
+        content = response.choices[0].message.content  # pyright: ignore[reportAttributeAccessIssue]
         if content is None:
             raise APIError(
                 message="Model returned empty content", llm_provider=self.model, model=self.model
-            )
+            )  # type: ignore
 
         return ModelResponse(
             content=content,
@@ -184,8 +184,8 @@ class LiteLLMProvider:
 
 
 def create_provider(
-    model: str,
-    temperature: float = 0.0,
+    model: str = "claude-3-5-sonnet-20241022",
+    temperature: float = 1.0,
     max_tokens: int = 100,
     max_retries: int = 3,
 ) -> LiteLLMProvider:

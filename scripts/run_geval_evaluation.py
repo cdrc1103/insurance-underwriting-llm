@@ -72,12 +72,15 @@ def parse_args() -> argparse.Namespace:
         help="Number of samples per criterion for probability estimation",
     )
     parser.add_argument(
-        "--max-tokens", type=int, default=1024, help="Number of output tokens allowed the generate"
+        "--max-tokens",
+        type=int,
+        default=1024,
+        help="Number of output tokens allowed the generate",
     )
     parser.add_argument(
         "--temperature",
         type=float,
-        default=2.0,
+        default=1.0,
         help="Sampling temperature for G-Eval",
     )
     parser.add_argument(
