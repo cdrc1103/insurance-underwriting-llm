@@ -28,7 +28,7 @@ class TestGenerationConfig:
         """Test default configuration values."""
         config = GenerationConfig()
 
-        assert config.max_new_tokens == 512
+        assert config.max_new_tokens == 1024
         assert config.temperature == 0.7
         assert config.top_p == 0.9
         assert config.top_k == 50

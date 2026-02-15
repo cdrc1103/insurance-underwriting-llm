@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.evaluation.model_provider import (
+from src.evaluation.judge_model_provider import (
     LiteLLMProvider,
     ModelResponse,
     create_provider,
@@ -66,7 +66,7 @@ class TestLiteLLMProvider:
         provider = LiteLLMProvider(model="claude-3-5-sonnet-20241022")
         assert provider.get_model_name() == "claude-3-5-sonnet-20241022"
 
-    @patch("src.evaluation.model_provider.litellm")
+    @patch("src.evaluation.judge_model_provider.litellm")
     def test_generate_calls_litellm(self, mock_litellm):
         """Test generate calls litellm.completion with correct params."""
         mock_response = MagicMock()
@@ -91,7 +91,7 @@ class TestLiteLLMProvider:
         assert result.output_tokens == 3
         assert result.cost_usd == 0.0005
 
-    @patch("src.evaluation.model_provider.litellm")
+    @patch("src.evaluation.judge_model_provider.litellm")
     def test_generate_kwargs_override(self, mock_litellm):
         """Test generate allows overriding temperature and max_tokens."""
         mock_response = MagicMock()
@@ -112,8 +112,8 @@ class TestLiteLLMProvider:
             max_tokens=50,
         )
 
-    @patch("src.evaluation.model_provider.time.sleep")
-    @patch("src.evaluation.model_provider.litellm")
+    @patch("src.evaluation.judge_model_provider.time.sleep")
+    @patch("src.evaluation.judge_model_provider.litellm")
     def test_generate_retries_on_rate_limit(self, mock_litellm, mock_sleep):
         """Test retry logic on rate limit errors."""
         from litellm.exceptions import RateLimitError

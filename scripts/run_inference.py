@@ -8,7 +8,6 @@ underwriting conversations, generating responses and saving results.
 import argparse
 import logging
 import os
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -27,50 +26,10 @@ from src.evaluation.inference import (
     evaluate_dataset_batched,
     save_evaluation_results,
 )
+from src.logging import setup_logging
 from src.models.model_loader import load_base_model
 
 logger = logging.getLogger(__name__)
-
-
-def setup_logging(log_dir: Path) -> Path:
-    """
-    Set up logging to both console and file.
-
-    Args:
-        log_dir: Directory to save log files
-
-    Returns:
-        Path to the created log file
-    """
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    # Create timestamped log file
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"inference_{timestamp}.log"
-
-    # Configure root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-
-    # Remove existing handlers
-    root_logger.handlers.clear()
-
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter("%(message)s")
-    console_handler.setFormatter(console_formatter)
-
-    # File handler
-    file_handler = logging.FileHandler(log_file, mode="w")
-    file_handler.setLevel(logging.INFO)
-    file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    file_handler.setFormatter(file_formatter)
-
-    root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
-
-    return log_file
 
 
 def run_inference(
@@ -97,7 +56,11 @@ def run_inference(
         log_dir: Directory to save log files (default: logs/)
     """
     # Set up logging
-    log_file = setup_logging(log_dir)
+    log_file = setup_logging(
+        log_dir=log_dir,
+        log_prefix="inference",
+        file_format="%(asctime)s - %(levelname)s - %(message)s",
+    )
     logger.info("=" * 80)
     logger.info("Running Inference")
     logger.info("=" * 80)
@@ -176,9 +139,12 @@ def run_inference(
     logger.info(f"Average output tokens: {total_output_tokens / len(dataset):.1f}")
     logger.info("")
 
-    # Save results
-    logger.info(f"Saving results to {output_path}...")
-    save_evaluation_results(result, output_path)
+    # Save results with date identifier
+    date_str = datetime.now().strftime("%Y%m%d")
+    dated_output_path = output_path.parent / f"{output_path.stem}_{date_str}{output_path.suffix}"
+
+    logger.info(f"Saving results to {dated_output_path}...")
+    save_evaluation_results(result, dated_output_path)
     logger.info("Done!")
     logger.info("")
 

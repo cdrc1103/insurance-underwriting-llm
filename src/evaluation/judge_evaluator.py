@@ -8,7 +8,7 @@ The evaluator is provider-agnostic through the model_provider abstraction layer,
 supporting any LLM provider (Anthropic, OpenAI, etc.) via LiteLLM.
 
 Example:
-    from src.evaluation.model_provider import create_provider
+    from src.evaluation.judge_model_provider import create_provider
 
     provider = create_provider("claude-3-5-sonnet-20241022")
     config = GEvalConfig(num_samples=20, temperature=2.0)
@@ -24,7 +24,7 @@ from typing import Any
 
 from tqdm import tqdm
 
-from src.evaluation.model_provider import LiteLLMProvider, ModelResponse
+from src.evaluation.judge_model_provider import LiteLLMProvider, ModelResponse
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ class GEvalConfig:
 
     num_samples: int = 20
     temperature: float = 2.0
-    max_tokens: int = 512
+    max_tokens: int = 1024
     sample_delay: float = 0.5
 
     def __post_init__(self) -> None:

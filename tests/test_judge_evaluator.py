@@ -18,7 +18,7 @@ from src.evaluation.judge_evaluator import (
     results_to_dict,
     score_criterion,
 )
-from src.evaluation.model_provider import ModelResponse
+from src.evaluation.judge_model_provider import ModelResponse
 
 # --- Fixtures ---
 
@@ -197,7 +197,7 @@ class TestGEvalConfig:
         config = GEvalConfig()
         assert config.num_samples == 20
         assert config.temperature == 2.0
-        assert config.max_tokens == 512
+        assert config.max_tokens == 1024
         assert config.sample_delay == 0.5
 
     def test_invalid_num_samples_raises(self):
