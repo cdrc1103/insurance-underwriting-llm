@@ -66,7 +66,7 @@ class GEvalConfig:
 
     num_samples: int = 20
     temperature: float = 2.0
-    max_tokens: int = 512
+    max_tokens: int = 1024
     sample_delay: float = 0.5
 
     def __post_init__(self) -> None:

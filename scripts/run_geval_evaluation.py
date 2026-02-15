@@ -22,6 +22,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from configs.model import DEFAULT_MAX_NEW_TOKENS
 from src.evaluation.judge_evaluator import (
     GEvalConfig,
     batch_evaluate,
@@ -71,6 +72,9 @@ def parse_args() -> argparse.Namespace:
         help="Number of samples per criterion for probability estimation",
     )
     parser.add_argument(
+        "--max-tokens", type=int, default=1024, help="Number of output tokens allowed the generate"
+    )
+    parser.add_argument(
         "--temperature",
         type=float,
         default=2.0,
@@ -116,18 +120,20 @@ def main() -> None:
     provider = create_provider(
         model=args.model,
         temperature=args.temperature,
-        max_tokens=1024,
+        max_tokens=DEFAULT_MAX_NEW_TOKENS,
     )
 
     config = GEvalConfig(
         num_samples=args.num_samples,
         temperature=args.temperature,
         sample_delay=args.sample_delay,
+        max_tokens=args.max_tokens,
     )
 
     logger.info("Model: %s", args.model)
     logger.info("Samples per criterion: %d", config.num_samples)
     logger.info("Temperature: %.1f", config.temperature)
+    logger.info("Max Tokens, %d", config.max_tokens)
 
     # Estimate cost
     estimated_calls = len(results) * 6 * config.num_samples
@@ -149,22 +155,26 @@ def main() -> None:
 
     logger.info("Results saved to %s", output_path)
 
-    # Print summary
+    # Log summary
     metrics = output_dict["aggregate_metrics"]
-    print("\n=== G-Eval Results Summary ===")
-    print(f"Model: {args.model}")
-    print(f"Examples: {metrics['total_examples']} ({metrics['valid_examples']} valid)")
-    print(f"Overall Mean Score: {metrics['overall_mean']:.2f} / 5.0")
-    print(f"Total API Calls: {metrics['total_api_calls']}")
-    print(f"Total Cost: ${metrics['total_cost_usd']:.4f}")
 
-    print("\nBy Task Type:")
+    summary_lines = [
+        "=== G-Eval Results Summary ===",
+        f"Model: {args.model}",
+        f"Examples: {metrics['total_examples']} ({metrics['valid_examples']} valid)",
+        f"Overall Mean Score: {metrics['overall_mean']:.2f} / 5.0",
+        f"Total API Calls: {metrics['total_api_calls']}",
+        f"Total Cost: ${metrics['total_cost_usd']:.4f}",
+        "\nBy Task Type:",
+    ]
     for task, task_data in metrics.get("by_task", {}).items():
-        print(f"  {task}: {task_data['mean']:.2f} (n={task_data['count']})")
+        summary_lines.append(f"  {task}: {task_data['mean']:.2f} (n={task_data['count']})")
 
-    print("\nBy Criterion:")
+    summary_lines.append("\nBy Criterion:")
     for criterion, crit_data in metrics.get("by_criterion", {}).items():
-        print(f"  {criterion}: {crit_data['mean']:.2f} (n={crit_data['count']})")
+        summary_lines.append(f"  {criterion}: {crit_data['mean']:.2f} (n={crit_data['count']})")
+
+    logger.info("\n" + "\n".join(summary_lines))
 
 
 if __name__ == "__main__":
